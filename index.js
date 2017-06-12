@@ -1,6 +1,8 @@
 // electron-process-comms
 
-// import electron from 'electron';
+import electron from 'electron';
+
+const { ipcMain, ipcRenderer } = electron;
 
 // determines process originating from
 const Process = {
@@ -24,7 +26,7 @@ const Process = {
 	},
 	is: (type) => {
 		if (typeof type === 'string') {
-			return type === this.type();
+			return type === Process.type();
 		} else {
 			throw new TypeError('type of `type` was not string');
 		}
@@ -35,22 +37,53 @@ const isPromise = (val) => {
 	return val && typeof val.then === 'function';
 }
 
-class ProcessComms {
+export default class ProcessComms {
 	constructor(options = {}) {
 		let { actions = {} } = options;
 
 		this._actions = Object.create(null);
 
-		const store = this
+		const instance = this
+		this.instance = this
 
 		Object.keys(actions).forEach((action) => {
-			registerAction(store, action, actions[action], store)
+			this.registerAction(instance, action, actions[action], instance);
+			this.initListener(instance, action);
 		})
 
 		const { dispatch, commit } = this;
 
 		this.dispatch = function boundDispatch (type, payload) {
-			return dispatch.call(store, type, payload);
+			return dispatch.call(instance, type, payload);
+		}
+	}
+
+	initListener(instance, type) {
+		if (Process.is('main') === true) {
+			ipcMain.on('ProcessComms', (event, arg) => {
+				const { action, payload } = arg;
+				instance.dispatch(action, payload)  // add .then(() => { event.sender.send('ProcessComms-Reply') })
+			});
+		} else if (Process.is('renderer') === true) {
+			ipcRenderer.on(type, (event, arg) => {
+				const { action, payload } = arg;
+				instance.dispatch(action, payload) // add .then(() => { event.sender.send('ProcessComms-Reply') })
+			});
+		}
+	}
+
+	send(type, payload) {
+		const arg = {
+			process: Process.type(),
+			action: type,
+			payload
+		};
+
+		if (Process.is('main') === true) {
+			let win; // TEMP
+			win.webContents.send('ProcessComms', arg)
+		} else if (Process.is('renderer') === true) {
+			ipcRenderer.send('ProcessComms', arg)
 		}
 	}
 
@@ -69,33 +102,19 @@ class ProcessComms {
 
 		return entry.length > 1 ? Promise.all(entry.map(handler => handler(payload))) : entry[0](payload);
 	}
-}
 
-const registerAction = (store, type, handler, local) => {
-	const entry = store._actions[type] || (store._actions[type] = []);
-	entry.push((payload, cb) => {
-		let res = handler({
-			dispatch: local.dispatch
-		}, payload, cb);
+	registerAction(instance, type, handler, local) {
+		const entry = instance._actions[type] || (instance._actions[type] = []);
+		entry.push((payload, cb) => {
+			let res = handler({
+				dispatch: local.dispatch
+			}, payload, cb);
 
-		if (!isPromise(res)) {
-			res = Promise.resolve(res);
-		}
+			if (!isPromise(res)) {
+				res = Promise.resolve(res);
+			}
 
-		return res
-	})
-}
-
-const processComms = new ProcessComms({
-	actions: {
-		init: ({ dispatch }) => {
-			console.log('hello')
-			dispatch('init2')
-		},
-		init2: ({ dispatch }) => {
-			console.log('bye')
-		}
+			return res;
+		})
 	}
-});
-
-processComms.dispatch('init')
+}
