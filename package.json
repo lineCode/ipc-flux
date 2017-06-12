@@ -1,0 +1,12 @@
+{
+  "name": "electron-process-comms",
+  "version": "0.0.0",
+  "author": "Harry Park <harry@harrypark.io>",
+  "description": "an ipc based electron process communication interface",
+  "license": "MIT",
+  "repository": "https://github.com/harryparkdotio/electron-process-comms.git",
+  "main": "index.js",
+  "devDependencies": {
+    "electron": "^1.6.10"
+  }
+}
