@@ -1,11 +1,10 @@
-// electron-process-comms
-
 import electron from 'electron';
 
 const { ipcMain, ipcRenderer } = electron;
 
 // determines process originating from
 const Process = {
+	// return the type of process as a string
 	type: () => {
 		// running in browser
 		if (typeof process === 'undefined') {
@@ -24,6 +23,7 @@ const Process = {
 
 		return process.type === 'renderer' ? 'renderer' : 'main';
 	},
+	// explicit type checking
 	is: (type) => {
 		if (typeof type === 'string') {
 			return type === Process.type();
@@ -49,20 +49,34 @@ export default class ProcessComms {
 			this.registerAction(instance, action, actions[action], instance);
 		})
 
-		if (Process.is('main') === true) {
+		// setup ipc listeners
+		if (Process.is('main')) {
+			// main ipc listener
 			ipcMain.on('ProcessComms', (event, arg) => {
 				const { action, payload } = arg;
 				instance.dispatch(action, payload)  // add .then(() => { event.sender.send('ProcessComms-Reply') })
 			});
-		} else if (Process.is('renderer') === true) {
+
+			// main error ipc listener
+			ipcMain.on('ProcessComms-Error', (event, err) => {
+				console.error(err)
+			});
+		} else if (Process.is('renderer')) {
+			// renderer ipc listener
 			ipcRenderer.on('ProcessComms', (event, arg) => {
 				const { action, payload } = arg;
 				instance.dispatch(action, payload) // add .then(() => { event.sender.send('ProcessComms-Reply') })
+			});
+
+			// renderer error ipc listener
+			ipcRenderer.on('ProcessComms-Error', (event, err) => {
+				console.error(err)
 			});
 		}
 
 		const { dispatch, dispatchExternal } = this;
 
+		// setup dispatchers
 		this.dispatch = function boundDispatch (type, payload) {
 			return dispatch.call(instance, type, payload);
 		}
@@ -77,7 +91,7 @@ export default class ProcessComms {
 			process: Process.type()
 		}
 
-		if (Process.is('main') === true) {
+		if (Process.is('main')) {
 			if (typeof _target !== 'object') {
 				console.error('target BrowserWindow not passed as parameter');
 				return;
@@ -95,7 +109,7 @@ export default class ProcessComms {
 			}
 
 			_target.webContents.send('ProcessComms', arg);
-		} else if (Process.is('renderer') === true) {
+		} else if (Process.is('renderer')) {
 			if (typeof _target !== 'string') {
 				console.error('action not passed as parameter');
 				return;
@@ -130,8 +144,10 @@ export default class ProcessComms {
 	registerAction(instance, action, handler, local) {
 		const entry = instance._actions[action] || (instance._actions[action] = []);
 		entry.push((payload, cb) => {
+			// flip, pops in other process!
 			let res = handler({
-				dispatch: local.dispatch
+				dispatch: local.dispatch,
+				dispatchExternal: local.dispatchExternal
 			}, payload, cb);
 
 			if (!isPromise(res)) {
