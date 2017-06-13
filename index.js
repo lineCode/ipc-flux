@@ -44,67 +44,91 @@ export default class ProcessComms {
 		this._actions = Object.create(null);
 
 		const instance = this
-		this.instance = this
 
 		Object.keys(actions).forEach((action) => {
 			this.registerAction(instance, action, actions[action], instance);
-			this.initListener(instance, action);
 		})
 
-		const { dispatch, commit } = this;
-
-		this.dispatch = function boundDispatch (type, payload) {
-			return dispatch.call(instance, type, payload);
-		}
-	}
-
-	initListener(instance, type) {
 		if (Process.is('main') === true) {
 			ipcMain.on('ProcessComms', (event, arg) => {
 				const { action, payload } = arg;
 				instance.dispatch(action, payload)  // add .then(() => { event.sender.send('ProcessComms-Reply') })
 			});
 		} else if (Process.is('renderer') === true) {
-			ipcRenderer.on(type, (event, arg) => {
+			ipcRenderer.on('ProcessComms', (event, arg) => {
 				const { action, payload } = arg;
 				instance.dispatch(action, payload) // add .then(() => { event.sender.send('ProcessComms-Reply') })
 			});
 		}
-	}
 
-	send(type, payload) {
-		const arg = {
-			process: Process.type(),
-			action: type,
-			payload
-		};
+		const { dispatch, dispatchExternal } = this;
 
-		if (Process.is('main') === true) {
-			let win; // TEMP
-			win.webContents.send('ProcessComms', arg)
-		} else if (Process.is('renderer') === true) {
-			ipcRenderer.send('ProcessComms', arg)
+		this.dispatch = function boundDispatch (type, payload) {
+			return dispatch.call(instance, type, payload);
+		}
+
+		this.dispatchExternal = function boundDispatchExternal(target, action, payload) {
+			return dispatchExternal.call(instance, target, action, payload)
 		}
 	}
 
-	dispatch(_type, _payload) {
-		const { type, payload } = {
-			type: _type,
+	dispatchExternal(_target, _action, _payload) {
+		let arg = {
+			process: Process.type()
+		}
+
+		if (Process.is('main') === true) {
+			if (typeof _target !== 'object') {
+				console.error('target BrowserWindow not passed as parameter');
+				return;
+			}
+
+			if (typeof _action !== 'string') {
+				console.error('action not passed as parameter');
+				return;
+			}
+
+			arg.action = _action;
+
+			if (typeof _payload !== 'undefined') {
+				arg.payload = _payload
+			}
+
+			_target.webContents.send('ProcessComms', arg);
+		} else if (Process.is('renderer') === true) {
+			if (typeof _target !== 'string') {
+				console.error('action not passed as parameter');
+				return;
+			}
+
+			arg.action = _target;
+
+			if (typeof _action !== 'undefined') {
+				arg.payload = _action
+			}
+
+			ipcRenderer.send('ProcessComms', arg);
+		}
+	}
+
+	dispatch(_action, _payload) {
+		const { action, payload } = {
+			action: _action,
 			payload: _payload
 		};
 
-		const entry = this._actions[type];
+		const entry = this._actions[action];
 
 		if (!entry) {
-			console.error(`unknown action type: ${type}`);
+			console.error(`unknown action: ${action}`);
 			return;
 		}
 
 		return entry.length > 1 ? Promise.all(entry.map(handler => handler(payload))) : entry[0](payload);
 	}
 
-	registerAction(instance, type, handler, local) {
-		const entry = instance._actions[type] || (instance._actions[type] = []);
+	registerAction(instance, action, handler, local) {
+		const entry = instance._actions[action] || (instance._actions[action] = []);
 		entry.push((payload, cb) => {
 			let res = handler({
 				dispatch: local.dispatch
