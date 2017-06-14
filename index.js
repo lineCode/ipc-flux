@@ -1,6 +1,12 @@
 import electron from 'electron';
 
-const { ipcMain, ipcRenderer } = electron;
+const { ipcMain, ipcRenderer, webContents, remote } = electron;
+
+const channels = {
+	call: 'ProcessComms-Call',
+	callback: 'ProcessComms-Callback',
+	error: 'ProcessComms-Error'
+};
 
 // determines process originating from
 const Process = {
@@ -43,42 +49,49 @@ export default class ProcessComms {
 
 		this._actions = Object.create(null);
 
-		const instance = this
+		const instance = this;
 
 		Object.keys(actions).forEach((action) => {
 			this.registerAction(instance, action, actions[action], instance);
-		})
+		});
 
 		// setup ipc listeners
 		if (Process.is('main')) {
 			// main ipc listener
-			ipcMain.on('ProcessComms', (event, arg) => {
+			ipcMain.on(channels.call, (event, arg) => {
 				const { action, payload } = arg;
-				instance.dispatch(action, payload)  // add .then(() => { event.sender.send('ProcessComms-Reply') })
+				console.log(arg)
+				instance.dispatch({ process: arg.process, target: arg.target }, action, payload) //.then((data) => { event.sender.send(channels.callback, data); });
 			});
 
 			// main error ipc listener
-			ipcMain.on('ProcessComms-Error', (event, err) => {
-				console.error(err)
+			ipcMain.on(channels.error, (event, err) => {
+				console.error(err);
 			});
+
+			// main callback ipc listener
+			ipcMain.on(channels.callback, (event, data) => {});
 		} else if (Process.is('renderer')) {
 			// renderer ipc listener
-			ipcRenderer.on('ProcessComms', (event, arg) => {
+			ipcRenderer.on(channels.call, (event, arg) => {
 				const { action, payload } = arg;
-				instance.dispatch(action, payload) // add .then(() => { event.sender.send('ProcessComms-Reply') })
+				instance.dispatch({ process: arg.process, target: remote.getCurrentWindow().id }, action, payload) //.then((data) => { event.sender.send(channels.callback, data);});
 			});
 
 			// renderer error ipc listener
-			ipcRenderer.on('ProcessComms-Error', (event, err) => {
-				console.error(err)
+			ipcRenderer.on(channels.error, (event, err) => {
+				console.error(err);
 			});
+
+			// renderer callback ipc listener
+			ipcRenderer.on(channels.callback, (event, data) => {});
 		}
 
 		const { dispatch, dispatchExternal } = this;
 
 		// setup dispatchers
-		this.dispatch = function boundDispatch (type, payload) {
-			return dispatch.call(instance, type, payload);
+		this.dispatch = function boundDispatch (caller, type, payload) {
+			return dispatch.call(instance, caller, type, payload);
 		}
 
 		this.dispatchExternal = function boundDispatchExternal(target, action, payload) {
@@ -92,40 +105,45 @@ export default class ProcessComms {
 		}
 
 		if (Process.is('main')) {
-			if (typeof _target !== 'object') {
+			if (typeof _target === 'object' || typeof _target === 'number') {} else {
 				console.error('target BrowserWindow not passed as parameter');
 				return;
 			}
+
+			_target = typeof _target === 'object' ? _target.webContents.id : _target
 
 			if (typeof _action !== 'string') {
 				console.error('action not passed as parameter');
 				return;
 			}
 
-			arg.action = _action;
-
 			if (typeof _payload !== 'undefined') {
 				arg.payload = _payload
 			}
-
-			_target.webContents.send('ProcessComms', arg);
+			webContents.fromId(_target).send(channels.call, {
+				...arg,
+				action: _action,
+				target: _target
+			});
 		} else if (Process.is('renderer')) {
 			if (typeof _target !== 'string') {
 				console.error('action not passed as parameter');
 				return;
 			}
 
-			arg.action = _target;
-
 			if (typeof _action !== 'undefined') {
 				arg.payload = _action
 			}
 
-			ipcRenderer.send('ProcessComms', arg);
+			ipcRenderer.send(channels.call, {
+				...arg,
+				action: _target,
+				target: remote.getCurrentWindow().id
+			});
 		}
 	}
 
-	dispatch(_action, _payload) {
+	dispatch(_caller, _action, _payload) {
 		const { action, payload } = {
 			action: _action,
 			payload: _payload
@@ -134,7 +152,15 @@ export default class ProcessComms {
 		const entry = this._actions[action];
 
 		if (!entry) {
-			console.error(`unknown action: ${action}`);
+			if (_caller.process === Process.type()) {
+				console.error(`unknown action: ${action}`);
+			} else {
+				if (Process.is('main')) {
+					webContents.fromId(_caller.target).send(channels.error, `unknown action: ${action}`)
+				} else if (Process.is('renderer')) {
+					ipcRenderer.send(channels.error, `unknown action: ${action}`);
+				}
+			}
 			return;
 		}
 
@@ -144,7 +170,6 @@ export default class ProcessComms {
 	registerAction(instance, action, handler, local) {
 		const entry = instance._actions[action] || (instance._actions[action] = []);
 		entry.push((payload, cb) => {
-			// flip, pops in other process!
 			let res = handler({
 				dispatch: local.dispatch,
 				dispatchExternal: local.dispatchExternal
