@@ -61,7 +61,7 @@ export default class ProcessComms {
 			ipcMain.on(channels.call, (event, arg) => {
 				const { action, payload } = arg;
 
-				instance.dispatch({ process: arg.process, target: arg.target }, action, payload).then((data) => {
+				instance.dispatchAction({ process: arg.process, target: arg.target }, action, payload).then((data) => {
 					event.sender.send(channels.callback, {
 						...arg,
 						data
@@ -78,11 +78,12 @@ export default class ProcessComms {
 			ipcRenderer.on(channels.call, (event, arg) => {
 				const { action, payload } = arg;
 
-				instance.dispatch({ process: arg.process, target: remote.getCurrentWindow().id }, action, payload).then((data) => {
+				instance.dispatchAction({ process: arg.process, target: remote.getCurrentWindow().id }, action, payload).then((data) => {
+					console.log(arg, data)
 					event.sender.send(channels.callback, {
 						...arg,
 						target: remote.getCurrentWindow().id,
-						data: JSON.stringify(data)
+						data
 					});
 				});
 			});
@@ -93,38 +94,36 @@ export default class ProcessComms {
 			});
 		}
 
-		const { dispatch, dispatchExternal } = this;
+		const { dispatchAction, dispatchExternalAction } = this;
 
 		// setup dispatchers
 		this.dispatch = function boundDispatch (type, payload) {
-			return dispatch.call(instance, {
+			return dispatchAction.call(instance, {
 				process: Process.type(),
 				target: Process.is('renderer') ? remote.getCurrentWindow().id : null
 			}, type, payload);
 		}
 
 		this.dispatchExternal = function boundDispatchExternal(target, action, payload) {
-			const dispatchExternalPromise = new Promise((resolve, reject) => {
-				dispatchExternal.call(instance, target, action, payload);
+			return new Promise((resolve, reject) => {
+				dispatchExternalAction.call(instance, target, action, payload);
 
 				if (Process.is('main')) {
 					// main callback ipc listener
 					return ipcMain.once(channels.callback, (event, arg) => {
-						resolve(JSON.parse(arg));
+						resolve(arg.data);
 					});
 				} else if (Process.is('renderer')) {
 					// renderer callback ipc listener
 					return ipcRenderer.once(channels.callback, (event, arg) => {
-						resolve(JSON.parse(arg));
+						resolve(arg.data);
 					});
 				}
 			});
-
-			return dispatchExternalPromise;
 		}
 	}
 
-	dispatchExternal(_target, _action, _payload) {
+	dispatchExternalAction(_target, _action, _payload) {
 		let arg = {
 			process: Process.type()
 		}
@@ -168,7 +167,7 @@ export default class ProcessComms {
 		}
 	}
 
-	dispatch(_caller, _action, _payload) {
+	dispatchAction(_caller, _action, _payload) {
 		const { action, payload } = {
 			action: _action,
 			payload: _payload
