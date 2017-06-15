@@ -60,42 +60,67 @@ export default class ProcessComms {
 			// main ipc listener
 			ipcMain.on(channels.call, (event, arg) => {
 				const { action, payload } = arg;
-				console.log(arg)
-				instance.dispatch({ process: arg.process, target: arg.target }, action, payload) //.then((data) => { event.sender.send(channels.callback, data); });
+
+				instance.dispatch({ process: arg.process, target: arg.target }, action, payload).then((data) => {
+					event.sender.send(channels.callback, {
+						...arg,
+						data
+					});
+				});
 			});
 
 			// main error ipc listener
 			ipcMain.on(channels.error, (event, err) => {
 				console.error(err);
 			});
-
-			// main callback ipc listener
-			ipcMain.on(channels.callback, (event, data) => {});
 		} else if (Process.is('renderer')) {
 			// renderer ipc listener
 			ipcRenderer.on(channels.call, (event, arg) => {
 				const { action, payload } = arg;
-				instance.dispatch({ process: arg.process, target: remote.getCurrentWindow().id }, action, payload) //.then((data) => { event.sender.send(channels.callback, data);});
+
+				instance.dispatch({ process: arg.process, target: remote.getCurrentWindow().id }, action, payload).then((data) => {
+					event.sender.send(channels.callback, {
+						...arg,
+						target: remote.getCurrentWindow().id,
+						data: JSON.stringify(data)
+					});
+				});
 			});
 
 			// renderer error ipc listener
 			ipcRenderer.on(channels.error, (event, err) => {
 				console.error(err);
 			});
-
-			// renderer callback ipc listener
-			ipcRenderer.on(channels.callback, (event, data) => {});
 		}
 
 		const { dispatch, dispatchExternal } = this;
 
 		// setup dispatchers
-		this.dispatch = function boundDispatch (caller, type, payload) {
-			return dispatch.call(instance, caller, type, payload);
+		this.dispatch = function boundDispatch (type, payload) {
+			return dispatch.call(instance, {
+				process: Process.type(),
+				target: Process.is('renderer') ? remote.getCurrentWindow().id : null
+			}, type, payload);
 		}
 
 		this.dispatchExternal = function boundDispatchExternal(target, action, payload) {
-			return dispatchExternal.call(instance, target, action, payload)
+			const dispatchExternalPromise = new Promise((resolve, reject) => {
+				dispatchExternal.call(instance, target, action, payload);
+
+				if (Process.is('main')) {
+					// main callback ipc listener
+					return ipcMain.once(channels.callback, (event, arg) => {
+						resolve(JSON.parse(arg));
+					});
+				} else if (Process.is('renderer')) {
+					// renderer callback ipc listener
+					return ipcRenderer.once(channels.callback, (event, arg) => {
+						resolve(JSON.parse(arg));
+					});
+				}
+			});
+
+			return dispatchExternalPromise;
 		}
 	}
 
@@ -151,7 +176,9 @@ export default class ProcessComms {
 
 		const entry = this._actions[action];
 
+		// if no action was found
 		if (!entry) {
+			// show the error in the log from where it was called from
 			if (_caller.process === Process.type()) {
 				console.error(`unknown action: ${action}`);
 			} else {
@@ -164,6 +191,7 @@ export default class ProcessComms {
 			return;
 		}
 
+		// return a promise of the action, passing in the payload
 		return entry.length > 1 ? Promise.all(entry.map(handler => handler(payload))) : entry[0](payload);
 	}
 
