@@ -1,6 +1,4 @@
-import electron from 'electron';
-
-const { ipcMain, ipcRenderer, webContents, remote } = electron;
+import { ipcMain, ipcRenderer, webContents, remote } from 'electron';
 
 const channels = {
 	call: 'ProcessComms-Call',
@@ -43,25 +41,23 @@ const isPromise = (val) => {
 	return val && typeof val.then === 'function';
 }
 
-export default class ProcessComms {
+class ProcessComms {
 	constructor(options = {}) {
 		let { actions = {} } = options;
 
-		this._actions = Object.create(null);
-
 		const instance = this;
 
+		this._actions = Object.create(null);
+
 		Object.keys(actions).forEach((action) => {
-			this.registerAction(instance, action, actions[action], instance);
+			this.registerAction(action, actions[action]);
 		});
 
 		// setup ipc listeners
 		if (Process.is('main')) {
 			// main ipc listener
 			ipcMain.on(channels.call, (event, arg) => {
-				const { action, payload } = arg;
-
-				instance.dispatchAction({ process: arg.process, target: arg.target }, action, payload).then((data) => {
+				instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload).then((data) => {
 					event.sender.send(channels.callback, {
 						...arg,
 						data
@@ -76,10 +72,7 @@ export default class ProcessComms {
 		} else if (Process.is('renderer')) {
 			// renderer ipc listener
 			ipcRenderer.on(channels.call, (event, arg) => {
-				const { action, payload } = arg;
-
-				instance.dispatchAction({ process: arg.process, target: remote.getCurrentWindow().id }, action, payload).then((data) => {
-					console.log(arg, data)
+				instance.dispatchAction({ process: arg.process, target: remote.getCurrentWindow().id }, arg.action, arg.payload).then((data) => {
 					event.sender.send(channels.callback, {
 						...arg,
 						target: remote.getCurrentWindow().id,
@@ -194,12 +187,15 @@ export default class ProcessComms {
 		return entry.length > 1 ? Promise.all(entry.map(handler => handler(payload))) : entry[0](payload);
 	}
 
-	registerAction(instance, action, handler, local) {
+	registerAction(action, handler) {
+		const instance = this;
+
 		const entry = instance._actions[action] || (instance._actions[action] = []);
+
 		entry.push((payload, cb) => {
 			let res = handler({
-				dispatch: local.dispatch,
-				dispatchExternal: local.dispatchExternal
+				dispatch: instance.dispatch,
+				dispatchExternal: instance.dispatchExternal
 			}, payload, cb);
 
 			if (!isPromise(res)) {
@@ -210,3 +206,5 @@ export default class ProcessComms {
 		})
 	}
 }
+
+export default ProcessComms
