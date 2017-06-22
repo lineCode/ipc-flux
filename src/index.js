@@ -57,12 +57,21 @@ class ProcessComms {
 		if (Process.is('main')) {
 			// main ipc listener
 			ipcMain.on(channels.call, (event, arg) => {
-				instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload).then((data) => {
-					event.sender.send(channels.callback, {
-						...arg,
-						data
+				const act = instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload);
+
+				if (isPromise(act)) {
+					act.then((data) => {
+						event.sender.send(channels.callback, {
+							...arg,
+							data
+						});
 					});
-				});
+				} else {
+					console.log('Promise was not returned');
+					event.sender.send(channels.callback, {
+						...arg
+					});
+				}
 			});
 
 			// main error ipc listener
@@ -72,13 +81,23 @@ class ProcessComms {
 		} else if (Process.is('renderer')) {
 			// renderer ipc listener
 			ipcRenderer.on(channels.call, (event, arg) => {
-				instance.dispatchAction({ process: arg.process, target: remote.getCurrentWindow().id }, arg.action, arg.payload).then((data) => {
+				const act = instance.dispatchAction({ process: arg.process, target: remote.getCurrentWindow().id }, arg.action, arg.payload);
+
+				if (isPromise(act)) {
+					act.then((data) => {
+						event.sender.send(channels.callback, {
+							...arg,
+							target: remote.getCurrentWindow().id,
+							data
+						});
+					});
+				} else {
+					console.log('Promise was not returned');
 					event.sender.send(channels.callback, {
 						...arg,
-						target: remote.getCurrentWindow().id,
-						data
+						target: remote.getCurrentWindow().id
 					});
-				});
+				}
 			});
 
 			// renderer error ipc listener

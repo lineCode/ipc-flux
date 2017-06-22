@@ -1,6 +1,9 @@
 # electron-process-comms
 an ipc based electron process communication interface
 
+[![npm](https://img.shields.io/npm/v/electron-process-comms.svg?style=flat-square)](https://www.npmjs.com/package/electron-process-comms)
+[![npm](https://img.shields.io/npm/dt/electron-process-comms.svg?style=flat-square)](https://www.npmjs.com/package/electron-process-comms)
+
 ### installation
 ```bash
 $ npm i electron-process-comms

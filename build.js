@@ -79,11 +79,18 @@ var ProcessComms = function () {
 		if (Process.is('main')) {
 			// main ipc listener
 			_electron.ipcMain.on(channels.call, function (event, arg) {
-				instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload).then(function (data) {
-					event.sender.send(channels.callback, _extends({}, arg, {
-						data: data
-					}));
-				});
+				var act = instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload);
+
+				if (isPromise(act)) {
+					act.then(function (data) {
+						event.sender.send(channels.callback, _extends({}, arg, {
+							data: data
+						}));
+					});
+				} else {
+					console.log('Promise was not returned');
+					event.sender.send(channels.callback, _extends({}, arg));
+				}
 			});
 
 			// main error ipc listener
@@ -93,12 +100,21 @@ var ProcessComms = function () {
 		} else if (Process.is('renderer')) {
 			// renderer ipc listener
 			_electron.ipcRenderer.on(channels.call, function (event, arg) {
-				instance.dispatchAction({ process: arg.process, target: _electron.remote.getCurrentWindow().id }, arg.action, arg.payload).then(function (data) {
+				var act = instance.dispatchAction({ process: arg.process, target: _electron.remote.getCurrentWindow().id }, arg.action, arg.payload);
+
+				if (isPromise(act)) {
+					act.then(function (data) {
+						event.sender.send(channels.callback, _extends({}, arg, {
+							target: _electron.remote.getCurrentWindow().id,
+							data: data
+						}));
+					});
+				} else {
+					console.log('Promise was not returned');
 					event.sender.send(channels.callback, _extends({}, arg, {
-						target: _electron.remote.getCurrentWindow().id,
-						data: data
+						target: _electron.remote.getCurrentWindow().id
 					}));
-				});
+				}
 			});
 
 			// renderer error ipc listener
