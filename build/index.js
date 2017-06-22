@@ -79,17 +79,21 @@ var ProcessComms = function () {
 		if (Process.is('main')) {
 			// main ipc listener
 			_electron.ipcMain.on(channels.call, function (event, arg) {
-				var act = instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload);
+				if (instance.actionExists(arg.action)) {
+					var act = instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload);
 
-				if (isPromise(act)) {
-					act.then(function (data) {
-						event.sender.send(channels.callback, _extends({}, arg, {
-							data: data
-						}));
-					});
+					if (isPromise(act)) {
+						act.then(function (data) {
+							event.sender.send(channels.callback, _extends({}, arg, {
+								data: data
+							}));
+						});
+					} else {
+						console.log('Promise was not returned');
+						event.sender.send(channels.callback, _extends({}, arg));
+					}
 				} else {
-					console.log('Promise was not returned');
-					event.sender.send(channels.callback, _extends({}, arg));
+					event.sender.send(channels.error, 'unknown action in main process: ' + arg.action);
 				}
 			});
 
@@ -100,20 +104,24 @@ var ProcessComms = function () {
 		} else if (Process.is('renderer')) {
 			// renderer ipc listener
 			_electron.ipcRenderer.on(channels.call, function (event, arg) {
-				var act = instance.dispatchAction({ process: arg.process, target: _electron.remote.getCurrentWindow().id }, arg.action, arg.payload);
+				if (instance.actionExists(arg.action)) {
+					var act = instance.dispatchAction({ process: arg.process, target: _electron.remote.getCurrentWindow().id }, arg.action, arg.payload);
 
-				if (isPromise(act)) {
-					act.then(function (data) {
+					if (isPromise(act)) {
+						act.then(function (data) {
+							event.sender.send(channels.callback, _extends({}, arg, {
+								target: _electron.remote.getCurrentWindow().id,
+								data: data
+							}));
+						});
+					} else {
+						console.log('Promise was not returned');
 						event.sender.send(channels.callback, _extends({}, arg, {
-							target: _electron.remote.getCurrentWindow().id,
-							data: data
+							target: _electron.remote.getCurrentWindow().id
 						}));
-					});
+					}
 				} else {
-					console.log('Promise was not returned');
-					event.sender.send(channels.callback, _extends({}, arg, {
-						target: _electron.remote.getCurrentWindow().id
-					}));
+					event.sender.send(channels.error, 'unknown action in renderer process: ' + arg.action);
 				}
 			});
 
@@ -136,7 +144,7 @@ var ProcessComms = function () {
 		};
 
 		this.dispatchExternal = function boundDispatchExternal(target, action, payload) {
-			return new Promise(function (resolve, reject) {
+			return new Promise(function (resolve) {
 				dispatchExternalAction.call(instance, target, action, payload);
 
 				if (Process.is('main')) {
@@ -155,6 +163,11 @@ var ProcessComms = function () {
 	}
 
 	_createClass(ProcessComms, [{
+		key: 'actionExists',
+		value: function actionExists(action) {
+			return !!this._actions[action];
+		}
+	}, {
 		key: 'dispatchExternalAction',
 		value: function dispatchExternalAction(_target, _action, _payload) {
 			var arg = {
@@ -215,12 +228,6 @@ var ProcessComms = function () {
 				// show the error in the log from where it was called from
 				if (_caller.process === Process.type()) {
 					console.error('unknown action: ' + action);
-				} else {
-					if (Process.is('main')) {
-						_electron.webContents.fromId(_caller.target).send(channels.error, 'unknown action: ' + action);
-					} else if (Process.is('renderer')) {
-						_electron.ipcRenderer.send(channels.error, 'unknown action: ' + action);
-					}
 				}
 				return;
 			}
@@ -235,7 +242,7 @@ var ProcessComms = function () {
 		value: function registerAction(action, handler) {
 			var instance = this;
 
-			var entry = instance._actions[action] || (instance._actions[action] = []);
+			var entry = Array.isArray(instance._actions[action]) ? instance._actions[action] : instance._actions[action] = [];
 
 			entry.push(function (payload, cb) {
 				var res = handler({
@@ -256,3 +263,4 @@ var ProcessComms = function () {
 }();
 
 exports.default = ProcessComms;
+//# sourceMappingURL=index.js.map

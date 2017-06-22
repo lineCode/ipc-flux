@@ -57,20 +57,24 @@ class ProcessComms {
 		if (Process.is('main')) {
 			// main ipc listener
 			ipcMain.on(channels.call, (event, arg) => {
-				const act = instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload);
+				if (instance.actionExists(arg.action)) {
+					const act = instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload);
 
-				if (isPromise(act)) {
-					act.then((data) => {
-						event.sender.send(channels.callback, {
-							...arg,
-							data
+					if (isPromise(act)) {
+						act.then((data) => {
+							event.sender.send(channels.callback, {
+								...arg,
+								data
+							});
 						});
-					});
+					} else {
+						console.log('Promise was not returned');
+						event.sender.send(channels.callback, {
+							...arg
+						});
+					}
 				} else {
-					console.log('Promise was not returned');
-					event.sender.send(channels.callback, {
-						...arg
-					});
+					event.sender.send(channels.error, `unknown action in main process: ${arg.action}`);
 				}
 			});
 
@@ -81,22 +85,26 @@ class ProcessComms {
 		} else if (Process.is('renderer')) {
 			// renderer ipc listener
 			ipcRenderer.on(channels.call, (event, arg) => {
-				const act = instance.dispatchAction({ process: arg.process, target: remote.getCurrentWindow().id }, arg.action, arg.payload);
+				if (instance.actionExists(arg.action)) {
+					const act = instance.dispatchAction({ process: arg.process, target: remote.getCurrentWindow().id }, arg.action, arg.payload);
 
-				if (isPromise(act)) {
-					act.then((data) => {
+					if (isPromise(act)) {
+						act.then((data) => {
+							event.sender.send(channels.callback, {
+								...arg,
+								target: remote.getCurrentWindow().id,
+								data
+							});
+						});
+					} else {
+						console.log('Promise was not returned');
 						event.sender.send(channels.callback, {
 							...arg,
-							target: remote.getCurrentWindow().id,
-							data
+							target: remote.getCurrentWindow().id
 						});
-					});
+					}
 				} else {
-					console.log('Promise was not returned');
-					event.sender.send(channels.callback, {
-						...arg,
-						target: remote.getCurrentWindow().id
-					});
+					event.sender.send(channels.error, `unknown action in renderer process: ${arg.action}`);
 				}
 			});
 
@@ -117,7 +125,7 @@ class ProcessComms {
 		}
 
 		this.dispatchExternal = function boundDispatchExternal(target, action, payload) {
-			return new Promise((resolve, reject) => {
+			return new Promise((resolve) => {
 				dispatchExternalAction.call(instance, target, action, payload);
 
 				if (Process.is('main')) {
@@ -133,6 +141,10 @@ class ProcessComms {
 				}
 			});
 		}
+	}
+
+	actionExists(action) {
+		return !!this._actions[action];
 	}
 
 	dispatchExternalAction(_target, _action, _payload) {
@@ -154,7 +166,7 @@ class ProcessComms {
 			}
 
 			if (typeof _payload !== 'undefined') {
-				arg.payload = _payload
+				arg.payload = _payload;
 			}
 			webContents.fromId(_target).send(channels.call, {
 				...arg,
@@ -168,7 +180,7 @@ class ProcessComms {
 			}
 
 			if (typeof _action !== 'undefined') {
-				arg.payload = _action
+				arg.payload = _action;
 			}
 
 			ipcRenderer.send(channels.call, {
@@ -192,12 +204,6 @@ class ProcessComms {
 			// show the error in the log from where it was called from
 			if (_caller.process === Process.type()) {
 				console.error(`unknown action: ${action}`);
-			} else {
-				if (Process.is('main')) {
-					webContents.fromId(_caller.target).send(channels.error, `unknown action: ${action}`)
-				} else if (Process.is('renderer')) {
-					ipcRenderer.send(channels.error, `unknown action: ${action}`);
-				}
 			}
 			return;
 		}
@@ -209,7 +215,7 @@ class ProcessComms {
 	registerAction(action, handler) {
 		const instance = this;
 
-		const entry = instance._actions[action] || (instance._actions[action] = []);
+		const entry = Array.isArray(instance._actions[action]) ? instance._actions[action] : instance._actions[action] = [];
 
 		entry.push((payload, cb) => {
 			let res = handler({
