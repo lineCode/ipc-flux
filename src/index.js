@@ -6,6 +6,10 @@ const channels = {
 	error: 'ProcessComms-Error'
 };
 
+const assert = (condition, msg) => {
+  if (!condition) throw new Error(`[ProcessComms] ${msg}`)
+}
+
 // determines process originating from
 const Process = {
 	// return the type of process as a string
@@ -43,7 +47,12 @@ const isPromise = (val) => {
 
 class ProcessComms {
 	constructor(options = {}) {
-		let { actions = {} } = options;
+		if (process.env.NODE_ENV !== 'production') {
+			assert(typeof Promise !== 'undefined', 'ProcessComms requires Promises to function.');
+			assert(this instanceof ProcessComms, 'ProcessComms must be called with the new operator.');
+		}
+
+		let { actions={} } = options;
 
 		const instance = this;
 
@@ -53,7 +62,7 @@ class ProcessComms {
 			this.registerAction(action, actions[action]);
 		});
 
-		// setup ipc listeners
+		// setup ipc action listeners
 		if (Process.is('main')) {
 			// main ipc listener
 			ipcMain.on(channels.call, (event, arg) => {
@@ -68,13 +77,13 @@ class ProcessComms {
 							});
 						});
 					} else {
-						console.log('Promise was not returned');
+						console.log('[ProcessComms] Promise was not returned');
 						event.sender.send(channels.callback, {
 							...arg
 						});
 					}
 				} else {
-					event.sender.send(channels.error, `unknown action in main process: ${arg.action}`);
+					event.sender.send(channels.error, `[ProcessComms] unknown action in main process: ${arg.action}`);
 				}
 			});
 
@@ -97,14 +106,14 @@ class ProcessComms {
 							});
 						});
 					} else {
-						console.log('Promise was not returned');
+						console.log('[ProcessComms] Promise was not returned');
 						event.sender.send(channels.callback, {
 							...arg,
 							target: remote.getCurrentWindow().id
 						});
 					}
 				} else {
-					event.sender.send(channels.error, `unknown action in renderer process: ${arg.action}`);
+					event.sender.send(channels.error, `[ProcessComms] unknown action in renderer process: ${arg.action}`);
 				}
 			});
 
@@ -154,14 +163,14 @@ class ProcessComms {
 
 		if (Process.is('main')) {
 			if (typeof _target === 'object' || typeof _target === 'number') {} else {
-				console.error('target BrowserWindow not passed as parameter');
+				console.error('[ProcessComms] target BrowserWindow not passed as parameter');
 				return;
 			}
 
 			_target = typeof _target === 'object' ? _target.webContents.id : _target
 
 			if (typeof _action !== 'string') {
-				console.error('action not passed as parameter');
+				console.error('[ProcessComms] action not passed as parameter');
 				return;
 			}
 
@@ -175,7 +184,7 @@ class ProcessComms {
 			});
 		} else if (Process.is('renderer')) {
 			if (typeof _target !== 'string') {
-				console.error('action not passed as parameter');
+				console.error('[ProcessComms] action not passed as parameter');
 				return;
 			}
 
@@ -203,7 +212,7 @@ class ProcessComms {
 		if (!entry) {
 			// show the error in the log from where it was called from
 			if (_caller.process === Process.type()) {
-				console.error(`unknown action: ${action}`);
+				console.error(`[ProcessComms] unknown action: ${action}`);
 			}
 			return;
 		}

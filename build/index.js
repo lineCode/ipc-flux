@@ -20,6 +20,10 @@ var channels = {
 	error: 'ProcessComms-Error'
 };
 
+var assert = function assert(condition, msg) {
+	if (!condition) throw new Error('[ProcessComms] ' + msg);
+};
+
 // determines process originating from
 var Process = {
 	// return the type of process as a string
@@ -63,6 +67,11 @@ var ProcessComms = function () {
 
 		_classCallCheck(this, ProcessComms);
 
+		if (process.env.NODE_ENV !== 'production') {
+			assert(typeof Promise !== 'undefined', 'ProcessComms requires Promises to function.');
+			assert(this instanceof ProcessComms, 'ProcessComms must be called with the new operator.');
+		}
+
 		var _options$actions = options.actions,
 		    actions = _options$actions === undefined ? {} : _options$actions;
 
@@ -75,7 +84,7 @@ var ProcessComms = function () {
 			_this.registerAction(action, actions[action]);
 		});
 
-		// setup ipc listeners
+		// setup ipc action listeners
 		if (Process.is('main')) {
 			// main ipc listener
 			_electron.ipcMain.on(channels.call, function (event, arg) {
@@ -89,11 +98,11 @@ var ProcessComms = function () {
 							}));
 						});
 					} else {
-						console.log('Promise was not returned');
+						console.log('[ProcessComms] Promise was not returned');
 						event.sender.send(channels.callback, _extends({}, arg));
 					}
 				} else {
-					event.sender.send(channels.error, 'unknown action in main process: ' + arg.action);
+					event.sender.send(channels.error, '[ProcessComms] unknown action in main process: ' + arg.action);
 				}
 			});
 
@@ -115,13 +124,13 @@ var ProcessComms = function () {
 							}));
 						});
 					} else {
-						console.log('Promise was not returned');
+						console.log('[ProcessComms] Promise was not returned');
 						event.sender.send(channels.callback, _extends({}, arg, {
 							target: _electron.remote.getCurrentWindow().id
 						}));
 					}
 				} else {
-					event.sender.send(channels.error, 'unknown action in renderer process: ' + arg.action);
+					event.sender.send(channels.error, '[ProcessComms] unknown action in renderer process: ' + arg.action);
 				}
 			});
 
@@ -176,14 +185,14 @@ var ProcessComms = function () {
 
 			if (Process.is('main')) {
 				if ((typeof _target === 'undefined' ? 'undefined' : _typeof(_target)) === 'object' || typeof _target === 'number') {} else {
-					console.error('target BrowserWindow not passed as parameter');
+					console.error('[ProcessComms] target BrowserWindow not passed as parameter');
 					return;
 				}
 
 				_target = (typeof _target === 'undefined' ? 'undefined' : _typeof(_target)) === 'object' ? _target.webContents.id : _target;
 
 				if (typeof _action !== 'string') {
-					console.error('action not passed as parameter');
+					console.error('[ProcessComms] action not passed as parameter');
 					return;
 				}
 
@@ -196,7 +205,7 @@ var ProcessComms = function () {
 				}));
 			} else if (Process.is('renderer')) {
 				if (typeof _target !== 'string') {
-					console.error('action not passed as parameter');
+					console.error('[ProcessComms] action not passed as parameter');
 					return;
 				}
 
@@ -227,7 +236,7 @@ var ProcessComms = function () {
 			if (!entry) {
 				// show the error in the log from where it was called from
 				if (_caller.process === Process.type()) {
-					console.error('unknown action: ' + action);
+					console.error('[ProcessComms] unknown action: ' + action);
 				}
 				return;
 			}
