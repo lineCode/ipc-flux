@@ -1,6 +1,6 @@
 {
 	"name": "electron-process-comms",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"author": "Harry Park <harry@harrypark.io>",
 	"description": "an ipc based electron process communication interface",
 	"license": "MIT",

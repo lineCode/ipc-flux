@@ -22,7 +22,7 @@ or
 const ProcessComms = require('electron-process-comms');
 ```
 
-### Creating Actions
+### Defining Actions
 
 > You can duplicate this in both the main and renderer processes
 
@@ -43,7 +43,7 @@ let processComms = new ProcessComms({
 })
 ```
 
-### Dispatching Actions in the Local Process
+### Dispatching Actions in the Local Process (Main/Renderer)
 
 local dispatch
 
@@ -51,7 +51,13 @@ local dispatch
 processComms.dispatch('init')
 ```
 
-### Dispatching Actions in the External Process
+### Dispatching Actions in the External Process (Main)
+
+```js
+processComms.dispatchExternal(targetBrowserWindow, 'init')
+```
+
+### Dispatching Actions in the External Process (Renderer)
 
 ```js
 processComms.dispatchExternal('init')
@@ -60,12 +66,10 @@ processComms.dispatchExternal('init')
 ### Dispatching with Payloads
 
 ```js
-processComms.dispatch('init', PAYLOAD).then((data) => {
-	console.log(data) // returned from `init`
-})
+processComms.dispatch('init', PAYLOAD)
 ```
 
-### Accessing Data Returned
+### Accessing Returned Data
 
 Each dispatch returns an instance of a promise.
 
