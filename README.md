@@ -43,6 +43,16 @@ let processComms = new ProcessComms({
 })
 ```
 
+or, register actions as needed like this:
+
+```js
+let processComms = new ProcessComms();
+
+processComms.registerAction('ACTION_NAME', ({ dispatch, dispatchExternal }, payload) => {
+	...
+});
+```
+
 ### Dispatching Actions in the Local Process (Main/Renderer)
 
 local dispatch

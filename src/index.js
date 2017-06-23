@@ -7,7 +7,9 @@ const channels = {
 };
 
 const assert = (condition, msg) => {
-  if (!condition) throw new Error(`[ProcessComms] ${msg}`)
+	if (!condition) {
+		throw new Error(`[ProcessComms] ${msg}`);
+	}
 }
 
 // determines process originating from
@@ -162,8 +164,9 @@ class ProcessComms {
 		}
 
 		if (Process.is('main')) {
-			if (typeof _target === 'object' || typeof _target === 'number') {} else {
-				console.error('[ProcessComms] target BrowserWindow not passed as parameter');
+			// xor with ternary
+			if (typeof _target === 'object' ? !(typeof _target === 'number') : typeof _target === 'number') {
+				console.error('[ProcessComms] target BrowserWindow or BrowserWindow id not passed as parameter');
 				return;
 			}
 
@@ -237,7 +240,7 @@ class ProcessComms {
 			}
 
 			return res;
-		})
+		});
 	}
 }
 

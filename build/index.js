@@ -21,7 +21,9 @@ var channels = {
 };
 
 var assert = function assert(condition, msg) {
-	if (!condition) throw new Error('[ProcessComms] ' + msg);
+	if (!condition) {
+		throw new Error('[ProcessComms] ' + msg);
+	}
 };
 
 // determines process originating from
@@ -184,8 +186,9 @@ var ProcessComms = function () {
 			};
 
 			if (Process.is('main')) {
-				if ((typeof _target === 'undefined' ? 'undefined' : _typeof(_target)) === 'object' || typeof _target === 'number') {} else {
-					console.error('[ProcessComms] target BrowserWindow not passed as parameter');
+				// xor with ternary
+				if ((typeof _target === 'undefined' ? 'undefined' : _typeof(_target)) === 'object' ? !(typeof _target === 'number') : typeof _target === 'number') {
+					console.error('[ProcessComms] target BrowserWindow or BrowserWindow id not passed as parameter');
 					return;
 				}
 
