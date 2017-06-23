@@ -186,8 +186,7 @@ var ProcessComms = function () {
 			};
 
 			if (Process.is('main')) {
-				// xor with ternary
-				if ((typeof _target === 'undefined' ? 'undefined' : _typeof(_target)) === 'object' ? !(typeof _target === 'number') : typeof _target === 'number') {
+				if ((typeof _target === 'undefined' ? 'undefined' : _typeof(_target)) === 'object' || typeof _target === 'number') {} else {
 					console.error('[ProcessComms] target BrowserWindow or BrowserWindow id not passed as parameter');
 					return;
 				}

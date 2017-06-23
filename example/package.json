@@ -1,0 +1,15 @@
+{
+  "name": "electron-process-comms-example",
+  "version": "0.0.0",
+  "author": "Harry Park <harry@harrypark.io>",
+  "description": "electron-process-comms example application",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^1.6.11",
+    "electron-process-comms": "^0.2.4"
+  }
+}
