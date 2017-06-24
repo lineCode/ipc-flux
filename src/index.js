@@ -60,98 +60,70 @@ class ProcessComms {
 
 		this._actions = Object.create(null);
 
-		Object.keys(actions).forEach((action) => {
-			this.registerAction(action, actions[action]);
-		});
+		const actionListener = (event, arg) => {
+			if (instance.actionExists(arg.action)) {
+				const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
 
-		// setup ipc action listeners
-		if (Process.is('main')) {
-			// main ipc listener
-			ipcMain.on(channels.call, (event, arg) => {
-				if (instance.actionExists(arg.action)) {
-					const act = instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload);
+				const act = instance.dispatchAction({ ...arg, target }, arg.action, arg.payload);
 
-					if (isPromise(act)) {
-						act.then((data) => {
-							event.sender.send(channels.callback, {
-								...arg,
-								data
-							});
-						});
-					} else {
-						console.log('[ProcessComms] Promise was not returned');
-						event.sender.send(channels.callback, {
-							...arg
-						});
-					}
-				} else {
-					event.sender.send(channels.error, `[ProcessComms] unknown action in main process: ${arg.action}`);
-				}
-			});
-
-			// main error ipc listener
-			ipcMain.on(channels.error, (event, err) => {
-				console.error(err);
-			});
-		} else if (Process.is('renderer')) {
-			// renderer ipc listener
-			ipcRenderer.on(channels.call, (event, arg) => {
-				if (instance.actionExists(arg.action)) {
-					const act = instance.dispatchAction({ process: arg.process, target: remote.getCurrentWindow().id }, arg.action, arg.payload);
-
-					if (isPromise(act)) {
-						act.then((data) => {
-							event.sender.send(channels.callback, {
-								...arg,
-								target: remote.getCurrentWindow().id,
-								data
-							});
-						});
-					} else {
-						console.log('[ProcessComms] Promise was not returned');
+				if (isPromise(act)) {
+					act.then((data) => {
 						event.sender.send(channels.callback, {
 							...arg,
-							target: remote.getCurrentWindow().id
+							target,
+							data
 						});
-					}
+					});
 				} else {
-					event.sender.send(channels.error, `[ProcessComms] unknown action in renderer process: ${arg.action}`);
+					console.warn('[ProcessComms] Promise was not returned');
+					event.sender.send(channels.callback, {
+						...arg,
+						target
+					});
 				}
-			});
-
-			// renderer error ipc listener
-			ipcRenderer.on(channels.error, (event, err) => {
-				console.error(err);
-			});
+			} else {
+				event.sender.send(channels.error, `[ProcessComms] unknown action in ${Process.type()} process: ${arg.action}`);
+			}
 		}
+
+		const emitter = Process.is('main') ? ipcMain : ipcRenderer;
+
+		emitter.on(channels.call, actionListener);
+		emitter.on(channels.error, (event, err) => {
+			console.error(err);
+		});
 
 		const { dispatchAction, dispatchExternalAction } = this;
 
 		// setup dispatchers
-		this.dispatch = function boundDispatch (type, payload) {
+		this.dispatch = (type, payload) => {
 			return dispatchAction.call(instance, {
 				process: Process.type(),
 				target: Process.is('renderer') ? remote.getCurrentWindow().id : null
 			}, type, payload);
 		}
 
-		this.dispatchExternal = function boundDispatchExternal(target, action, payload) {
+		this.dispatchExternal = (target, action, payload) => {
 			return new Promise((resolve) => {
 				dispatchExternalAction.call(instance, target, action, payload);
 
+				const cb = (event, arg) => {
+					resolve(arg.data);
+				}
+
 				if (Process.is('main')) {
 					// main callback ipc listener
-					return ipcMain.once(channels.callback, (event, arg) => {
-						resolve(arg.data);
-					});
+					return ipcMain.once(channels.callback, cb);
 				} else if (Process.is('renderer')) {
 					// renderer callback ipc listener
-					return ipcRenderer.once(channels.callback, (event, arg) => {
-						resolve(arg.data);
-					});
+					return ipcRenderer.once(channels.callback, cb);
 				}
 			});
 		}
+
+		Object.keys(actions).forEach((action) => {
+			this.registerAction(action, actions[action]);
+		});
 	}
 
 	actionExists(action) {

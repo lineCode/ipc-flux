@@ -82,95 +82,70 @@ var ProcessComms = function () {
 
 		this._actions = Object.create(null);
 
-		Object.keys(actions).forEach(function (action) {
-			_this.registerAction(action, actions[action]);
-		});
+		var actionListener = function actionListener(event, arg) {
+			if (instance.actionExists(arg.action)) {
+				var target = Process.is('renderer') ? _electron.remote.getCurrentWindow().id : arg.target;
 
-		// setup ipc action listeners
-		if (Process.is('main')) {
-			// main ipc listener
-			_electron.ipcMain.on(channels.call, function (event, arg) {
-				if (instance.actionExists(arg.action)) {
-					var act = instance.dispatchAction({ process: arg.process, target: arg.target }, arg.action, arg.payload);
+				var act = instance.dispatchAction(_extends({}, arg, { target: target }), arg.action, arg.payload);
 
-					if (isPromise(act)) {
-						act.then(function (data) {
-							event.sender.send(channels.callback, _extends({}, arg, {
-								data: data
-							}));
-						});
-					} else {
-						console.log('[ProcessComms] Promise was not returned');
-						event.sender.send(channels.callback, _extends({}, arg));
-					}
-				} else {
-					event.sender.send(channels.error, '[ProcessComms] unknown action in main process: ' + arg.action);
-				}
-			});
-
-			// main error ipc listener
-			_electron.ipcMain.on(channels.error, function (event, err) {
-				console.error(err);
-			});
-		} else if (Process.is('renderer')) {
-			// renderer ipc listener
-			_electron.ipcRenderer.on(channels.call, function (event, arg) {
-				if (instance.actionExists(arg.action)) {
-					var act = instance.dispatchAction({ process: arg.process, target: _electron.remote.getCurrentWindow().id }, arg.action, arg.payload);
-
-					if (isPromise(act)) {
-						act.then(function (data) {
-							event.sender.send(channels.callback, _extends({}, arg, {
-								target: _electron.remote.getCurrentWindow().id,
-								data: data
-							}));
-						});
-					} else {
-						console.log('[ProcessComms] Promise was not returned');
+				if (isPromise(act)) {
+					act.then(function (data) {
 						event.sender.send(channels.callback, _extends({}, arg, {
-							target: _electron.remote.getCurrentWindow().id
+							target: target,
+							data: data
 						}));
-					}
+					});
 				} else {
-					event.sender.send(channels.error, '[ProcessComms] unknown action in renderer process: ' + arg.action);
+					console.warn('[ProcessComms] Promise was not returned');
+					event.sender.send(channels.callback, _extends({}, arg, {
+						target: target
+					}));
 				}
-			});
+			} else {
+				event.sender.send(channels.error, '[ProcessComms] unknown action in ' + Process.type() + ' process: ' + arg.action);
+			}
+		};
 
-			// renderer error ipc listener
-			_electron.ipcRenderer.on(channels.error, function (event, err) {
-				console.error(err);
-			});
-		}
+		var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
+
+		emitter.on(channels.call, actionListener);
+		emitter.on(channels.error, function (event, err) {
+			console.error(err);
+		});
 
 		var dispatchAction = this.dispatchAction,
 		    dispatchExternalAction = this.dispatchExternalAction;
 
 		// setup dispatchers
 
-		this.dispatch = function boundDispatch(type, payload) {
+		this.dispatch = function (type, payload) {
 			return dispatchAction.call(instance, {
 				process: Process.type(),
 				target: Process.is('renderer') ? _electron.remote.getCurrentWindow().id : null
 			}, type, payload);
 		};
 
-		this.dispatchExternal = function boundDispatchExternal(target, action, payload) {
+		this.dispatchExternal = function (target, action, payload) {
 			return new Promise(function (resolve) {
 				dispatchExternalAction.call(instance, target, action, payload);
 
+				var cb = function cb(event, arg) {
+					resolve(arg.data);
+				};
+
 				if (Process.is('main')) {
 					// main callback ipc listener
-					return _electron.ipcMain.once(channels.callback, function (event, arg) {
-						resolve(arg.data);
-					});
+					return _electron.ipcMain.once(channels.callback, cb);
 				} else if (Process.is('renderer')) {
 					// renderer callback ipc listener
-					return _electron.ipcRenderer.once(channels.callback, function (event, arg) {
-						resolve(arg.data);
-					});
+					return _electron.ipcRenderer.once(channels.callback, cb);
 				}
 			});
 		};
+
+		Object.keys(actions).forEach(function (action) {
+			_this.registerAction(action, actions[action]);
+		});
 	}
 
 	_createClass(ProcessComms, [{
