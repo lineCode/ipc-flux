@@ -15,14 +15,14 @@ var _electron = require('electron');
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var channels = {
-	call: 'ProcessComms-Call',
-	callback: 'ProcessComms-Callback',
-	error: 'ProcessComms-Error'
+	call: 'IpcFlux-Call',
+	callback: 'IpcFlux-Callback',
+	error: 'IpcFlux-Error'
 };
 
 var assert = function assert(condition, msg) {
 	if (!condition) {
-		throw new Error('[ProcessComms] ' + msg);
+		throw new Error('[IpcFlux] ' + msg);
 	}
 };
 
@@ -61,17 +61,17 @@ var isPromise = function isPromise(val) {
 	return val && typeof val.then === 'function';
 };
 
-var ProcessComms = function () {
-	function ProcessComms() {
+var IpcFlux = function () {
+	function IpcFlux() {
 		var _this = this;
 
 		var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
 
-		_classCallCheck(this, ProcessComms);
+		_classCallCheck(this, IpcFlux);
 
 		if (process.env.NODE_ENV !== 'production') {
-			assert(typeof Promise !== 'undefined', 'ProcessComms requires Promises to function.');
-			assert(this instanceof ProcessComms, 'ProcessComms must be called with the new operator.');
+			assert(typeof Promise !== 'undefined', 'IpcFlux requires Promises to function.');
+			assert(this instanceof IpcFlux, 'IpcFlux must be called with the new operator.');
 		}
 
 		var _options$actions = options.actions,
@@ -96,13 +96,13 @@ var ProcessComms = function () {
 						}));
 					});
 				} else {
-					console.warn('[ProcessComms] Promise was not returned');
+					console.warn('[IpcFlux] Promise was not returned');
 					event.sender.send(channels.callback, _extends({}, arg, {
 						target: target
 					}));
 				}
 			} else {
-				event.sender.send(channels.error, '[ProcessComms] unknown action in ' + Process.type() + ' process: ' + arg.action);
+				event.sender.send(channels.error, '[IpcFlux] unknown action in ' + Process.type() + ' process: ' + arg.action);
 			}
 		};
 
@@ -148,7 +148,7 @@ var ProcessComms = function () {
 		});
 	}
 
-	_createClass(ProcessComms, [{
+	_createClass(IpcFlux, [{
 		key: 'actionExists',
 		value: function actionExists(action) {
 			return !!this._actions[action];
@@ -162,14 +162,14 @@ var ProcessComms = function () {
 
 			if (Process.is('main')) {
 				if ((typeof _target === 'undefined' ? 'undefined' : _typeof(_target)) === 'object' || typeof _target === 'number') {} else {
-					console.error('[ProcessComms] target BrowserWindow or BrowserWindow id not passed as parameter');
+					console.error('[IpcFlux] target BrowserWindow or BrowserWindow id not passed as parameter');
 					return;
 				}
 
 				_target = (typeof _target === 'undefined' ? 'undefined' : _typeof(_target)) === 'object' ? _target.webContents.id : _target;
 
 				if (typeof _action !== 'string') {
-					console.error('[ProcessComms] action not passed as parameter');
+					console.error('[IpcFlux] action not passed as parameter');
 					return;
 				}
 
@@ -182,7 +182,7 @@ var ProcessComms = function () {
 				}));
 			} else if (Process.is('renderer')) {
 				if (typeof _target !== 'string') {
-					console.error('[ProcessComms] action not passed as parameter');
+					console.error('[IpcFlux] action not passed as parameter');
 					return;
 				}
 
@@ -213,7 +213,7 @@ var ProcessComms = function () {
 			if (!entry) {
 				// show the error in the log from where it was called from
 				if (_caller.process === Process.type()) {
-					console.error('[ProcessComms] unknown action: ' + action);
+					console.error('[IpcFlux] unknown action: ' + action);
 				}
 				return;
 			}
@@ -245,8 +245,8 @@ var ProcessComms = function () {
 		}
 	}]);
 
-	return ProcessComms;
+	return IpcFlux;
 }();
 
-exports.default = ProcessComms;
+exports.default = IpcFlux;
 //# sourceMappingURL=index.js.map

@@ -1,6 +1,6 @@
-const ProcessComms = require('../build/index.js').default
+const IpcFlux = require('../build/index.js').default();
 
-const processComms = new ProcessComms({
+const ipcFlux = new IpcFlux({
 	actions: {
 		action4: () => {
 			console.log('\n\nrenderer-process::action4\n\n')
@@ -14,5 +14,5 @@ const processComms = new ProcessComms({
 	}
 })
 
-processComms.dispatch('action5')
-processComms.dispatchExternal('action2')
+ipcFlux.dispatch('action5')
+ipcFlux.dispatchExternal('action2')

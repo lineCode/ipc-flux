@@ -1,8 +1,8 @@
 const { expect, should, assert } = require('chai');
 
-import ProcessComms from '../index.js';
+import IpcFlux from '../build/index.js';
 
-const processComms = new ProcessComms({
+const ipcFlux = new IpcFlux({
 	actions: {
 		// no dispatchers, no payload
 		mainTest1: () => {
@@ -42,54 +42,54 @@ const processComms = new ProcessComms({
 describe('Main actions', () => {
 	it('test 1', () => {
 
-		processComms.dispatchExternal('rendererTest1').then((data) => {
+		ipcFlux.dispatchExternal('rendererTest1').then((data) => {
 			console.log(data)
 			expect(data).to.be.equal('rendererTest1');
 		});
 
-		processComms.dispatch('mainTest1').then((data) => {
+		ipcFlux.dispatch('mainTest1').then((data) => {
 			expect(data).to.equal('mainTest1');
 		});
 	});
 
 	it('test 2', () => {
-		return processComms.dispatch('mainTest2').then((data) => {
+		return ipcFlux.dispatch('mainTest2').then((data) => {
 			expect(data).to.equal('mainTest2');
 		});
 	});
 
 	it('test 3', () => {
-		return processComms.dispatch('mainTest3').then((data) => {
+		return ipcFlux.dispatch('mainTest3').then((data) => {
 			expect(data).to.equal('mainTest3');
 		});
 	});
 
 	it('test 4', () => {
-		return processComms.dispatch('mainTest4').then((data) => {
+		return ipcFlux.dispatch('mainTest4').then((data) => {
 			expect(data).to.equal('mainTest4');
 		});
 	});
 
 	it('test 5', () => {
-		return processComms.dispatch('mainTest5').then((data) => {
+		return ipcFlux.dispatch('mainTest5').then((data) => {
 			expect(data).to.equal('mainTest5');
 		});
 	});
 
 	it('test 6', () => {
-		return processComms.dispatch('mainTest6').then((data) => {
+		return ipcFlux.dispatch('mainTest6').then((data) => {
 			expect(data).to.equal('mainTest6');
 		});
 	});
 
 	it('test 7', () => {
-		return processComms.dispatch('mainTest7').then((data) => {
+		return ipcFlux.dispatch('mainTest7').then((data) => {
 			expect(data).to.equal('mainTest7');
 		});
 	});
 
 	it('test 8', () => {
-		return processComms.dispatch('mainTest8').then((data) => {
+		return ipcFlux.dispatch('mainTest8').then((data) => {
 			expect(data).to.equal('mainTest8');
 		});
 	});

@@ -1,10 +1,10 @@
 {
-  "name": "electron-process-comms",
-  "version": "0.2.6",
+  "name": "ipc-flux",
+  "version": "0.2.7",
   "author": "Harry Park <harry@harrypark.io>",
-  "description": "an ipc based electron process communication interface",
+  "description": "Flux like state & action management across electron processes (ipc).",
   "license": "MIT",
-  "repository": "https://github.com/harryparkdotio/electron-process-comms.git",
+  "repository": "https://github.com/harryparkdotio/ipc-flux.git",
   "main": "build/index.js",
   "scripts": {
     "build": "babel src/ --presets=es2015 --out-dir build/ --source-maps"

@@ -7,9 +7,9 @@ const url = require('url')
 
 let mainWindow
 
-const ProcessComms = require('../build/index.js').default
+const IpcFlux = require('../build/index.js').default();
 
-const processComms = new ProcessComms({
+const ipcFlux = new IpcFlux({
 	actions: {
 		action1: () => {
 			console.log('\n\nmain-process::action1\n\n')
@@ -38,8 +38,8 @@ function createWindow () {
 	})
 
 	setTimeout(function() {
-		processComms.dispatch('action1')
-		processComms.dispatchExternal(mainWindow, 'action6')
+		ipcFlux.dispatch('action1')
+		ipcFlux.dispatchExternal(mainWindow, 'action6')
 	}, 750)
 }
 

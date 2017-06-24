@@ -1,8 +1,8 @@
 {
-  "name": "electron-process-comms-example",
+  "name": "ipc-flux-example",
   "version": "0.0.0",
   "author": "Harry Park <harry@harrypark.io>",
-  "description": "electron-process-comms example application",
+  "description": "ipc-flux example app",
   "license": "MIT",
   "main": "main.js",
   "scripts": {
@@ -10,6 +10,6 @@
   },
   "devDependencies": {
     "electron": "^1.6.11",
-    "electron-process-comms": "^0.2.4"
+    "ipc-flux": "^0.2.7"
   }
 }

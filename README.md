@@ -1,108 +1,104 @@
-# electron-process-comms
-an ipc based electron process communication interface
+# ipc-flux
+> Flux like state & action management across electron processes (ipc).
 
-[![npm](https://img.shields.io/npm/v/electron-process-comms.svg?style=flat-square)](https://www.npmjs.com/package/electron-process-comms)
-[![npm](https://img.shields.io/npm/dt/electron-process-comms.svg?style=flat-square)](https://www.npmjs.com/package/electron-process-comms)
+[![npm](https://img.shields.io/npm/v/ipc-flux.svg?style=flat-square)](https://www.npmjs.com/package/ipc-flux)
+[![npm](https://img.shields.io/npm/dt/ipc-flux.svg?style=flat-square)](https://www.npmjs.com/package/ipc-flux)
 
 ### installation
 ```bash
-$ npm i electron-process-comms
+$ npm i ipc-flux -S
 ```
 
 ## Docs
 
-### import
+### import (ES6/ES2015)
 ```js
-import ProcessComms from 'electron-process-comms';
+import IpcFlux from 'ipc-flux';
 ```
 
-or
+or, using `require`
 
 ```js
-const ProcessComms = require('electron-process-comms');
+const IpcFlux = require('ipc-flux').default();
 ```
 
 ### Defining Actions
 
-> You can duplicate this in both the main and renderer processes
+> This can be duplicated in both main and renderer processes, ipc-flux accounts for and handles this
 
 ```js
-let processComms = new ProcessComms({
+let ipcflux = new IpcFlux({
 	actions: {
 		init: () => {
-			console.log('hello')
+			console.log('hello');
 		},
 		init2: ({ dispatch }) => {
-			dispatch('init')
+			dispatch('init');
 		},
 		init3: ({ dispatch, dispatchExternal }, payload) => {
-			console.log(payload)
-			return 'init3'
+			console.log(payload);
+			return 'init3';
 		}
 	}
-})
+});
 ```
 
-or, register actions as needed like this:
+or, register actions as required
 
 ```js
-let processComms = new ProcessComms();
+let ipcFlux = new IpcFlux();
 
-processComms.registerAction('ACTION_NAME', ({ dispatch, dispatchExternal }, payload) => {
+ipcFlux.registerAction('ACTION_NAME', ({ dispatch, dispatchExternal }, payload) => {
 	...
 });
 ```
 
-### Dispatching Actions in the Local Process (Main/Renderer)
-
-local dispatch
+### Dispatching Actions in the Local Process (Main or Renderer)
 
 ```js
-processComms.dispatch('init')
+ipcFlux.dispatch('init');
 ```
 
 ### Dispatching Actions in the External Process (Main)
 
 ```js
-processComms.dispatchExternal(targetBrowserWindow, 'init')
+// NOTE: You must pass in the targetBrowserWindow, or the targetBrowserWindow id
+// to dispatch renderer actions from the main process
+ipcFlux.dispatchExternal(targetBrowserWindow, 'init');
 ```
 
 ### Dispatching Actions in the External Process (Renderer)
 
 ```js
-processComms.dispatchExternal('init')
+ipcFlux.dispatchExternal('init');
 ```
 
 ### Dispatching with Payloads
 
 ```js
-processComms.dispatch('init', PAYLOAD)
+ipcFlux.dispatch('init', PAYLOAD);
 ```
 
 ### Accessing Returned Data
 
-Each dispatch returns an instance of a promise.
+Each dispatch returns a promise, because async!
 
 ```js
-processComms.dispatch('init').then((data) => {
-	console.log(data) // returned from `init`
-})
-```
+ipcFlux.dispatch('init').then((data) => {
+	console.log(data); // returned from `init`
+});
 
-This also works for external dispatchers
-
-```js
-processComms.dispatchExternal('init').then((data) => {
-	console.log(data) // returned from `init`
-})
+ipcFlux.dispatchExternal('init').then((data) => {
+	console.log(data); // returned from `init`
+});
 ```
 
 ### Example
 
 ```js
-import ProcessComms from 'electron-process-comms';
+import IpcFlux from 'ipc-flux';
 
-const processComms = new ProcessComms({
+const ipcFlux = new IpcFlux({
 	actions: {
 		action1: () => {
 			return 'action1';
@@ -114,9 +110,9 @@ const processComms = new ProcessComms({
 	}
 });
 
-processComms.dispatch('action1');
+ipcFlux.dispatch('action1');
 
-processComms.dispatch('action2').then((data) => {
+ipcFlux.dispatch('action2').then((data) => {
 	console.log(data);
 });
 ```
