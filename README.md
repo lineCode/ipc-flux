@@ -27,7 +27,7 @@ const IpcFlux = require('ipc-flux').default();
 > This can be duplicated in both main and renderer processes, ipc-flux accounts for and handles this
 
 ```js
-let ipcflux = new IpcFlux({
+const ipcflux = new IpcFlux({
 	actions: {
 		init: () => {
 			console.log('hello');
@@ -46,7 +46,7 @@ let ipcflux = new IpcFlux({
 or, register actions as required
 
 ```js
-let ipcFlux = new IpcFlux();
+const ipcFlux = new IpcFlux();
 
 ipcFlux.registerAction('ACTION_NAME', ({ dispatch, dispatchExternal }, payload) => {
 	...
