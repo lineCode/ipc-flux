@@ -7,7 +7,7 @@ const url = require('url')
 
 let mainWindow
 
-const IpcFlux = require('../build/index.js').default();
+const IpcFlux = require('../build/index.js').default;
 
 const ipcFlux = new IpcFlux({
 	actions: {

@@ -1,0 +1,29 @@
+language: node_js
+node_js:
+  - node
+before_script:
+  - export DISPLAY=:99.0; sh -e /etc/init.d/xvfb start
+
+install:
+  - npm install
+
+script:
+  - npm test
+
+cache:
+  directories:
+  - node_modules
+  - $HOME/.electron
+
+notifications:
+  email:
+    on_success: never
+    on_failure: change
+
+branches:
+  only:
+  - master
+
+env:
+  global:
+    secure: cNGKs6YQpfDg7aco5zSC/j655HwF5erMBQTjbdcNU1zgbnCfKI8D5CZdyVYxxqTIQBcE2YwuOMk5YdAmc8fcjEX2qi2rE5dgOh6Sh4FpNZDrWvWxMTV/mLYuZQt8eWIXQndgdAAoEFj2vws267uP4HrtX4PYJUgbLaUBd9CI/aBV2ZTqgx4AmudFLdz5oX/wR+zTaoxCfpEcM47GSHz7FNzLJOe95gAkuNgAtcS1rGmNIdYMFlzG8eTrDbVU8yMc8eWQc/l8VVWEhIvH0Io6rXvb/EeDzKE6sAh2AhcQHpVhlaDxaUWRN7hA0+054Gtg0vlkPYOA0qNm7gL2/QKv8AsBa6Wvk4hKJeizepx2n4SQeDieAU+Kq8nwPL8KQ3d0GhKPyM4aPk9L6ZsR8VaMAmqUqzM7NOo0ChUrKSjUGfYYIKYOTbwgE2MlAUbK54qBNeHblE4laojZz0I7iLTYpcyVTTfPCBa1SKM/w0cJyigKfPXx6slHDgOV/wmw2UADcBHgsH0aDnovdy6mXohVTzyhw7hb8wb7yJtI8Y+P7KwIAJwLSlkBqMxq8IftveLgH+NEkEyfARRsauLA5YN9B7ZPwIdwIIRV3sgFLxDoH4TTxQcZvv+U9R0svHi23syAtmc3gbYl9GEjXu+R0E2ntLVIc6jIrt2ujqrI7CeyY2k=

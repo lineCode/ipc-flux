@@ -1,7 +1,3 @@
-const { expect, should, assert } = require('chai');
-
-import IpcFlux from '../build/index.js';
-
 const ipcFlux = new IpcFlux({
 	actions: {
 		// no dispatchers, no payload

@@ -1,6 +1,7 @@
 # ipc-flux
 > Flux like state & action management across electron processes (ipc).
 
+[![Travis](https://img.shields.io/travis/harryparkdotio/ipc-flux.svg?style=flat-square)](https://travis-ci.org/harryparkdotio/ipc-flux/)
 [![npm](https://img.shields.io/npm/v/ipc-flux.svg?style=flat-square)](https://www.npmjs.com/package/ipc-flux)
 [![npm](https://img.shields.io/npm/dt/ipc-flux.svg?style=flat-square)](https://www.npmjs.com/package/ipc-flux)
 
@@ -19,7 +20,7 @@ import IpcFlux from 'ipc-flux';
 or, using `require`
 
 ```js
-const IpcFlux = require('ipc-flux').default();
+const IpcFlux = require('ipc-flux').default;
 ```
 
 ### Defining Actions
