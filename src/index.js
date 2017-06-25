@@ -1,3 +1,19 @@
+//     _                  _____
+//    (_)__  ____  ____  / _/ /_ ____ __
+//   / / _ \/ __/ /___/ / _/ / // /\ \ /
+//  /_/ .__/\__/       /_//_/\_,_//_\_\
+//   /_/
+//
+//	ipc-flux
+//
+//	github - https://github.com/harryparkdotio/ipc-flux
+//	npm - https://www.npmjs.com/package/ipc-flux
+//
+//	@harryparkdotio - harry@harrypark.io
+//
+//	MIT license
+//
+
 import { ipcMain, ipcRenderer, webContents, remote } from 'electron';
 
 import utils from './utils';
@@ -8,8 +24,11 @@ const channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
 	error: 'IpcFlux-Error',
-	handshake: 'IpcFlux-Handshake',
-	handshake_return: 'IpcFlux-HandshakeReturn'
+	handshake: {
+		default: 'IpcFlux-Handshake',
+		callback: 'IpcFlux-Handshake-Callback',
+		success: 'IpcFlux-Handshake-Success'
+	}
 };
 
 // remove all active IpcFlux listeners for the current process
@@ -17,7 +36,9 @@ const rmListeners = () => {
 	const emitter = Process.is('main') ? ipcMain : ipcRenderer;
 
 	Object.values(channels).forEach((channel) => {
-		emitter.removeAllListeners(channel);
+		typeof channel === 'object' ? Object.values(channel).forEach((subchannel) => {
+			emitter.removeAllListeners(subchannel);
+		}) : emitter.removeAllListeners(channel);
 	});
 }
 
@@ -34,17 +55,18 @@ class IpcFlux {
 
 		const { actions={}, config={} } = options;
 
-		this.config = {
+		// defined due to `this` being reassigned in arrow functions
+		const instance = this;
+
+		this._actions = Object.create(null);
+		this._config = Object.create(null);
+
+		this._config = {
 			handshake: {
 				timeout: 10000
 			},
 			...config
 		}
-
-		// defined due to `this` being reassigned in arrow functions
-		const instance = this;
-
-		this._actions = Object.create(null);
 
 		// the listener to be called for actions
 		const actionEmitHandler = (event, arg) => {
@@ -149,7 +171,19 @@ class IpcFlux {
 		}
 
 		// define the handshake config, specific to the process type
-		this.handshake = Process.is('main') ? { done: 0, total: 0, completed: false, targets: [], timeout: this.config.handshake.timeout } : { completed: false, timeout: this.config.handshake.timeout }
+		this.handshake = Process.is('main') ? {
+			done: 0,
+			total: 0,
+			completed: false,
+			callbacks_sent: 0,
+			targets: [],
+			timeout: this._config.handshake.timeout
+		} : {
+			completed: false,
+			timeout: this._config.handshake.timeout,
+			initiated: false,
+			callback_received: false
+		}
 
 		// start the handshaking process
 		this.beginHandshake();
@@ -165,13 +199,13 @@ class IpcFlux {
 				handshake.targets.push(arg.target);
 
 				// return handshake with target
-				event.sender.send(channels.handshake_return, {
+				event.sender.send(channels.handshake.callback, {
 					target: arg.target
 				});
 			}
 
 			// create a listener, each handshake is initiated from the renderer
-			ipcMain.on(channels.handshake, handshakeListener);
+			ipcMain.on(channels.handshake.default, handshakeListener);
 
 			const mainHandshakeListener = (event, arg) => {
 				// if the target has already been added (initial handshake successful)
@@ -184,66 +218,87 @@ class IpcFlux {
 
 				if (handshake.completed) {
 					// remove this handshake listener
-					ipcMain.removeListener(channels.handshake_return, mainHandshakeListener);
-					ipcMain.removeListener(channels.handshake, handshakeListener);
+					ipcMain.removeListener(channels.handshake.success, mainHandshakeListener);
+					ipcMain.removeListener(channels.handshake.default, handshakeListener);
 				}
 			}
 
-			ipcMain.on(channels.handshake_return, mainHandshakeListener);
+			ipcMain.on(channels.handshake.success, mainHandshakeListener);
 
 			// called to check if handshakes have been completed
 			setTimeout(() => {
 				handshake.completed = (handshake.done === handshake.total);
 
 				if (!handshake.completed) {
+					let cause;
+					if (handshake.callbacks_sent < handshake.total || handshake.callbacks_sent < handshake.targets.length) {
+						cause = 'not all callbacks were returned';
+					} else if (handshake.done < handshake.total) {
+						cause = 'not all initiated handshakes completed';
+					} else {
+						cause = 'unknown error';
+					}
+
 					// send error to all windows
 					webContents.getAllWebContents().forEach((win) => {
 						win.send(channels.error, {
 							type: 'throw',
-							message: `[IpcFlux] handshake did not complete within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`
+							message: `[IpcFlux] handshake failed (timeout): ${cause}`
 						});
 					});
-					throw new Error(`[IpcFlux] handshake did not complete within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`);
+					throw new Error(`[IpcFlux] handshake failed (timeout): ${cause}`);
 				}
 
 				// remove all main handshake listeners
-				ipcMain.removeAllListeners(channels.handshake);
-				ipcMain.removeAllListeners(channels.handshake_return);
+				ipcMain.removeAllListeners(channels.handshake.default);
+				ipcMain.removeAllListeners(channels.handshake.success);
 			}, handshake.timeout);
 		} else if (Process.is('renderer')) {
 			// initiate the handshake
-			ipcRenderer.send(channels.handshake, {
+			ipcRenderer.send(channels.handshake.default, {
 				target: remote.getCurrentWindow().id
 			});
+			handshake.initiated = true;
 
 			const rendererHandshakeListener = (event, arg) => {
+				handshake.callback_received = true;
 				if (arg.target === remote.getCurrentWindow().id) {
 					// return the handshake, verifies in main process handshake is complete
-					event.sender.send(channels.handshake_return, {
+					event.sender.send(channels.handshake.success, {
 						target: arg.target
 					});
 					handshake.completed = true;
 					// remove this listener
-					ipcRenderer.removeListener(channels.handshake_return, rendererHandshakeListener);
+					ipcRenderer.removeListener(channels.handshake.callback, rendererHandshakeListener);
 
 					// remove all renderer handshake listeners
-					ipcRenderer.removeAllListeners(channels.handshake);
-					ipcRenderer.removeAllListeners(channels.handshake_return);
+					ipcRenderer.removeAllListeners(channels.handshake.default);
+					ipcRenderer.removeAllListeners(channels.handshake.callback);
 				}
 			}
+
+			ipcRenderer.on(channels.handshake.callback, rendererHandshakeListener);
 
 			// called to check if this handshake has been completed
 			setTimeout(() => {
 				if (!handshake.done) {
-					throw new Error(`[IpcFlux] handshake did not complete within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`);
+					let cause;
+					if (handshake.initiated === false) {
+						cause = 'handshake not initiated';
+					} else if (handshake.callback_received === false) {
+						cause = 'handshake callback not received';
+					} else if (handshake.completed === false) {
+						cause = 'handshake was not completed';
+					} else {
+						cause = 'unknown error';
+					}
+					throw new Error(`[IpcFlux] handshake failed (timeout): ${cause}`);
 				}
 
 				// remove all renderer handshake listeners
 				ipcRenderer.removeAllListeners(channels.handshake);
-				ipcRenderer.removeAllListeners(channels.handshake_return);
+				ipcRenderer.removeAllListeners(channels.handshake.callback);
 			}, handshake.timeout);
-
-			ipcRenderer.on(channels.handshake_return, rendererHandshakeListener);
 		}
 	}
 

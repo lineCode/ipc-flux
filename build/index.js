@@ -4,11 +4,25 @@ Object.defineProperty(exports, "__esModule", {
 	value: true
 });
 
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
-
 var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; //     _                  _____
+//    (_)__  ____  ____  / _/ /_ ____ __
+//   / / _ \/ __/ /___/ / _/ / // /\ \ /
+//  /_/ .__/\__/       /_//_/\_,_//_\_\
+//   /_/
+//
+//	ipc-flux
+//
+//	github - https://github.com/harryparkdotio/ipc-flux
+//	npm - https://www.npmjs.com/package/ipc-flux
+//
+//	@harryparkdotio - harry@harrypark.io
+//
+//	MIT license
+//
 
 var _electron = require('electron');
 
@@ -30,8 +44,11 @@ var channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
 	error: 'IpcFlux-Error',
-	handshake: 'IpcFlux-Handshake',
-	handshake_return: 'IpcFlux-HandshakeReturn'
+	handshake: {
+		default: 'IpcFlux-Handshake',
+		callback: 'IpcFlux-Handshake-Callback',
+		success: 'IpcFlux-Handshake-Success'
+	}
 };
 
 // remove all active IpcFlux listeners for the current process
@@ -39,7 +56,9 @@ var rmListeners = function rmListeners() {
 	var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
 
 	Object.values(channels).forEach(function (channel) {
-		emitter.removeAllListeners(channel);
+		(typeof channel === 'undefined' ? 'undefined' : _typeof(channel)) === 'object' ? Object.values(channel).forEach(function (subchannel) {
+			emitter.removeAllListeners(subchannel);
+		}) : emitter.removeAllListeners(channel);
 	});
 };
 
@@ -65,17 +84,18 @@ var IpcFlux = function () {
 		    _options$config = options.config,
 		    config = _options$config === undefined ? {} : _options$config;
 
+		// defined due to `this` being reassigned in arrow functions
 
-		this.config = _extends({
+		var instance = this;
+
+		this._actions = Object.create(null);
+		this._config = Object.create(null);
+
+		this._config = _extends({
 			handshake: {
 				timeout: 10000
 			}
 		}, config);
-
-		// defined due to `this` being reassigned in arrow functions
-		var instance = this;
-
-		this._actions = Object.create(null);
 
 		// the listener to be called for actions
 		var actionEmitHandler = function actionEmitHandler(event, arg) {
@@ -179,7 +199,18 @@ var IpcFlux = function () {
 			channels: channels
 
 			// define the handshake config, specific to the process type
-		};this.handshake = Process.is('main') ? { done: 0, total: 0, completed: false, targets: [], timeout: this.config.handshake.timeout } : { completed: false, timeout: this.config.handshake.timeout
+		};this.handshake = Process.is('main') ? {
+			done: 0,
+			total: 0,
+			completed: false,
+			callbacks_sent: 0,
+			targets: [],
+			timeout: this._config.handshake.timeout
+		} : {
+			completed: false,
+			timeout: this._config.handshake.timeout,
+			initiated: false,
+			callback_received: false
 
 			// start the handshaking process
 		};this.beginHandshake();
@@ -198,13 +229,13 @@ var IpcFlux = function () {
 					handshake.targets.push(arg.target);
 
 					// return handshake with target
-					event.sender.send(channels.handshake_return, {
+					event.sender.send(channels.handshake.callback, {
 						target: arg.target
 					});
 				};
 
 				// create a listener, each handshake is initiated from the renderer
-				_electron.ipcMain.on(channels.handshake, handshakeListener);
+				_electron.ipcMain.on(channels.handshake.default, handshakeListener);
 
 				var mainHandshakeListener = function mainHandshakeListener(event, arg) {
 					// if the target has already been added (initial handshake successful)
@@ -217,66 +248,87 @@ var IpcFlux = function () {
 
 					if (handshake.completed) {
 						// remove this handshake listener
-						_electron.ipcMain.removeListener(channels.handshake_return, mainHandshakeListener);
-						_electron.ipcMain.removeListener(channels.handshake, handshakeListener);
+						_electron.ipcMain.removeListener(channels.handshake.success, mainHandshakeListener);
+						_electron.ipcMain.removeListener(channels.handshake.default, handshakeListener);
 					}
 				};
 
-				_electron.ipcMain.on(channels.handshake_return, mainHandshakeListener);
+				_electron.ipcMain.on(channels.handshake.success, mainHandshakeListener);
 
 				// called to check if handshakes have been completed
 				setTimeout(function () {
 					handshake.completed = handshake.done === handshake.total;
 
 					if (!handshake.completed) {
+						var cause = void 0;
+						if (handshake.callbacks_sent < handshake.total || handshake.callbacks_sent < handshake.targets.length) {
+							cause = 'not all callbacks were returned';
+						} else if (handshake.done < handshake.total) {
+							cause = 'not all initiated handshakes completed';
+						} else {
+							cause = 'unknown error';
+						}
+
 						// send error to all windows
 						_electron.webContents.getAllWebContents().forEach(function (win) {
 							win.send(channels.error, {
 								type: 'throw',
-								message: '[IpcFlux] handshake did not complete within set timeout of ' + handshake.timeout + 'ms (' + handshake.timeout / 1000 + 's)'
+								message: '[IpcFlux] handshake failed (timeout): ' + cause
 							});
 						});
-						throw new Error('[IpcFlux] handshake did not complete within set timeout of ' + handshake.timeout + 'ms (' + handshake.timeout / 1000 + 's)');
+						throw new Error('[IpcFlux] handshake failed (timeout): ' + cause);
 					}
 
 					// remove all main handshake listeners
-					_electron.ipcMain.removeAllListeners(channels.handshake);
-					_electron.ipcMain.removeAllListeners(channels.handshake_return);
+					_electron.ipcMain.removeAllListeners(channels.handshake.default);
+					_electron.ipcMain.removeAllListeners(channels.handshake.success);
 				}, handshake.timeout);
 			} else if (Process.is('renderer')) {
 				// initiate the handshake
-				_electron.ipcRenderer.send(channels.handshake, {
+				_electron.ipcRenderer.send(channels.handshake.default, {
 					target: _electron.remote.getCurrentWindow().id
 				});
+				handshake.initiated = true;
 
 				var rendererHandshakeListener = function rendererHandshakeListener(event, arg) {
+					handshake.callback_received = true;
 					if (arg.target === _electron.remote.getCurrentWindow().id) {
 						// return the handshake, verifies in main process handshake is complete
-						event.sender.send(channels.handshake_return, {
+						event.sender.send(channels.handshake.success, {
 							target: arg.target
 						});
 						handshake.completed = true;
 						// remove this listener
-						_electron.ipcRenderer.removeListener(channels.handshake_return, rendererHandshakeListener);
+						_electron.ipcRenderer.removeListener(channels.handshake.callback, rendererHandshakeListener);
 
 						// remove all renderer handshake listeners
-						_electron.ipcRenderer.removeAllListeners(channels.handshake);
-						_electron.ipcRenderer.removeAllListeners(channels.handshake_return);
+						_electron.ipcRenderer.removeAllListeners(channels.handshake.default);
+						_electron.ipcRenderer.removeAllListeners(channels.handshake.callback);
 					}
 				};
+
+				_electron.ipcRenderer.on(channels.handshake.callback, rendererHandshakeListener);
 
 				// called to check if this handshake has been completed
 				setTimeout(function () {
 					if (!handshake.done) {
-						throw new Error('[IpcFlux] handshake did not complete within set timeout of ' + handshake.timeout + 'ms (' + handshake.timeout / 1000 + 's)');
+						var cause = void 0;
+						if (handshake.initiated === false) {
+							cause = 'handshake not initiated';
+						} else if (handshake.callback_received === false) {
+							cause = 'handshake callback not received';
+						} else if (handshake.completed === false) {
+							cause = 'handshake was not completed';
+						} else {
+							cause = 'unknown error';
+						}
+						throw new Error('[IpcFlux] handshake failed (timeout): ' + cause);
 					}
 
 					// remove all renderer handshake listeners
 					_electron.ipcRenderer.removeAllListeners(channels.handshake);
-					_electron.ipcRenderer.removeAllListeners(channels.handshake_return);
+					_electron.ipcRenderer.removeAllListeners(channels.handshake.callback);
 				}, handshake.timeout);
-
-				_electron.ipcRenderer.on(channels.handshake_return, rendererHandshakeListener);
 			}
 		}
 	}, {

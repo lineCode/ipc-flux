@@ -132,11 +132,12 @@ ipcFlux.dispatch('action2').then((data) => {
 ```
 
 ### Info
-#### Used IPC Channels
+#### Used Ipc Channels
 - `IpcFlux-Call`
 - `IpcFlux-Callback`
 - `IpcFlux-Error`
 - `IpcFlux-Handshake`
-- `IpcFlux-HandshakeReturn`
+- `IpcFlux-Handshake-Callback`
+- `IpcFlux-Handshake-Success`
 
-Please do not use these Ipc channels as they are required by `IpcFlux`
+Please do **not** use the listed Ipc channels as doing so will likely interfere with the functionality of `IpcFlux`

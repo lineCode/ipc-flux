@@ -1,13 +1,13 @@
 {
   "name": "ipc-flux",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "author": "Harry Park <harry@harrypark.io>",
   "description": "Flux like state & action management across electron processes (ipc).",
   "license": "MIT",
   "repository": "https://github.com/harryparkdotio/ipc-flux.git",
   "main": "build/index.js",
   "scripts": {
-    "build": "babel --presets=es2015,stage-0 src/ --out-dir build/ --source-maps",
+    "build": "./node_modules/babel-cli/bin/babel.js --presets=es2015,stage-0 src/ --out-dir build/ --source-maps",
     "pretest": "npm run build",
     "test:main": "./node_modules/electron-mocha/bin/electron-mocha --require test/index.js --require-main test/main.js test/specs/main.spec.js",
     "test:renderer": "./node_modules/electron-mocha/bin/electron-mocha --require test/index.js --renderer test/specs/renderer.spec.js",
