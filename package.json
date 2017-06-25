@@ -1,6 +1,6 @@
 {
   "name": "ipc-flux",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": "Harry Park <harry@harrypark.io>",
   "description": "Flux like state & action management across electron processes (ipc).",
   "license": "MIT",

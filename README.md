@@ -130,3 +130,13 @@ ipcFlux.dispatch('action2').then((data) => {
 	console.log(data);
 });
 ```
+
+### Info
+#### Used IPC Channels
+- `IpcFlux-Call`
+- `IpcFlux-Callback`
+- `IpcFlux-Error`
+- `IpcFlux-Handshake`
+- `IpcFlux-HandshakeReturn`
+
+Please do not use these Ipc channels as they are required by `IpcFlux`

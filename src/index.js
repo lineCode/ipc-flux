@@ -25,8 +25,8 @@ class IpcFlux {
 	constructor(options = {}) {
 		if (Process.env.type() !== 'production') {
 			// check if Promises can be used
-			assert(typeof Promise !== 'undefined', 'IpcFlux requires Promises to function.');
-			assert(this instanceof IpcFlux, 'IpcFlux must be called with the new operator.');
+			assert(typeof Promise !== 'undefined', '[IpcFlux] requires Promises to function.');
+			assert(this instanceof IpcFlux, '[IpcFlux] must be called with the new operator.');
 		}
 
 		// remove IpcFlux listeners
@@ -148,8 +148,10 @@ class IpcFlux {
 			channels
 		}
 
-		this.handshake = Process.is('main') ? { done: 0, total: 0, completed: false, targets: [], timeout: this.config.handshake.timeout } : { completed: false }
+		// define the handshake config, specific to the process type
+		this.handshake = Process.is('main') ? { done: 0, total: 0, completed: false, targets: [], timeout: this.config.handshake.timeout } : { completed: false, timeout: this.config.handshake.timeout }
 
+		// start the handshaking process
 		this.beginHandshake();
 	}
 
@@ -159,16 +161,20 @@ class IpcFlux {
 		if (Process.is('main')) {
 			const handshakeListener = (event, arg) => {
 				handshake.total += 1;
+				// add target to targets, used to determine which handshakes pass/fail
 				handshake.targets.push(arg.target);
 
+				// return handshake with target
 				event.sender.send(channels.handshake_return, {
 					target: arg.target
 				});
 			}
 
+			// create a listener, each handshake is initiated from the renderer
 			ipcMain.on(channels.handshake, handshakeListener);
 
 			const mainHandshakeListener = (event, arg) => {
+				// if the target has already been added (initial handshake successful)
 				if (handshake.targets.indexOf(arg.target) >= 0) {
 					handshake.done += 1;
 					handshake.completed = (handshake.done === handshake.total);
@@ -177,6 +183,7 @@ class IpcFlux {
 				}
 
 				if (handshake.completed) {
+					// remove this handshake listener
 					ipcMain.removeListener(channels.handshake_return, mainHandshakeListener);
 					ipcMain.removeListener(channels.handshake, handshakeListener);
 				}
@@ -184,38 +191,57 @@ class IpcFlux {
 
 			ipcMain.on(channels.handshake_return, mainHandshakeListener);
 
+			// called to check if handshakes have been completed
 			setTimeout(() => {
+				handshake.completed = (handshake.done === handshake.total);
+
 				if (!handshake.completed) {
+					// send error to all windows
 					webContents.getAllWebContents().forEach((win) => {
 						win.send(channels.error, {
 							type: 'throw',
-							message: `[IpcFlux] handshake did not completed within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`
+							message: `[IpcFlux] handshake did not complete within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`
 						});
 					});
-					throw new Error(`[IpcFlux] handshake did not completed within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`);
+					throw new Error(`[IpcFlux] handshake did not complete within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`);
 				}
 
+				// remove all main handshake listeners
 				ipcMain.removeAllListeners(channels.handshake);
 				ipcMain.removeAllListeners(channels.handshake_return);
 			}, handshake.timeout);
 		} else if (Process.is('renderer')) {
+			// initiate the handshake
 			ipcRenderer.send(channels.handshake, {
-				process: Process.type(),
 				target: remote.getCurrentWindow().id
 			});
 
 			const rendererHandshakeListener = (event, arg) => {
 				if (arg.target === remote.getCurrentWindow().id) {
+					// return the handshake, verifies in main process handshake is complete
 					event.sender.send(channels.handshake_return, {
 						target: arg.target
 					});
 					handshake.completed = true;
+					// remove this listener
 					ipcRenderer.removeListener(channels.handshake_return, rendererHandshakeListener);
 
+					// remove all renderer handshake listeners
 					ipcRenderer.removeAllListeners(channels.handshake);
 					ipcRenderer.removeAllListeners(channels.handshake_return);
 				}
 			}
+
+			// called to check if this handshake has been completed
+			setTimeout(() => {
+				if (!handshake.done) {
+					throw new Error(`[IpcFlux] handshake did not complete within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`);
+				}
+
+				// remove all renderer handshake listeners
+				ipcRenderer.removeAllListeners(channels.handshake);
+				ipcRenderer.removeAllListeners(channels.handshake_return);
+			}, handshake.timeout);
 
 			ipcRenderer.on(channels.handshake_return, rendererHandshakeListener);
 		}
