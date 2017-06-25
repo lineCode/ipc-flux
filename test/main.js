@@ -7,6 +7,15 @@ const url = require('url');
 
 let mainWindow;
 
+const IpcFlux = require('../build/index.js').default;
+const ipcFlux = new IpcFlux({
+	actions: {
+		action1: () => {
+			return 'action1 main';
+		}
+	}
+});
+
 function createWindow () {
 	mainWindow = new BrowserWindow({
 		width: 800,

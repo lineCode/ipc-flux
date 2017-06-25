@@ -149,7 +149,7 @@ class IpcFlux {
 
 				// only resolve if the action callback is the same as that called, then remove the callback handler
 				const listener = (event, arg) => {
-					if (arg.action === action) {
+					if (Process.is('renderer') ? arg.action === target : arg.action === action) {
 						emitter.removeListener(channels.callback, listener);
 						resolve(arg.data);
 					}

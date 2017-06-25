@@ -9,7 +9,7 @@ describe('Renderer Process', () => {
 		expect(ipcFlux.debug.process).to.equal('renderer');
 	});
 
-	it('registerAction adds action to ipcFlux', () => {
+	it('registerAction adds action to ipcFlux', (done) => {
 		const ipcFlux = new IpcFlux();
 
 		ipcFlux.registerAction('action1', () => {
@@ -18,10 +18,11 @@ describe('Renderer Process', () => {
 
 		ipcFlux.dispatch('action1').then((data) => {
 			expect(data).to.equal('action1');
+			done();
 		});
 	});
 
-	it('actions can be dispatched locally', () => {
+	it('actions can be dispatched locally', (done) => {
 		const ipcFlux = new IpcFlux({
 			actions: {
 				action1: () => {
@@ -32,10 +33,11 @@ describe('Renderer Process', () => {
 
 		ipcFlux.dispatch('action1').then((data) => {
 			expect(data).to.equal('action1');
+			done();
 		});
 	});
 
-	it('actions can be dispatched locally with dispatch param', () => {
+	it('actions can be dispatched locally with dispatch param', (done) => {
 		const ipcFlux = new IpcFlux({
 			actions: {
 				action1: ({ dispatch }) => {
@@ -49,10 +51,11 @@ describe('Renderer Process', () => {
 
 		ipcFlux.dispatch('action1').then((data) => {
 			expect(data).to.equal('action2');
+			done();
 		});
 	});
 
-	it('actions can be dispatched locally with payload', () => {
+	it('actions can be dispatched locally with payload', (done) => {
 		const ipcFlux = new IpcFlux({
 			actions: {
 				action1: ({}, payload) => {
@@ -63,10 +66,11 @@ describe('Renderer Process', () => {
 
 		ipcFlux.dispatch('action1', 'hello').then((data) => {
 			expect(data).to.equal('hello');
+			done();
 		});
 	});
 
-	it('actions can be dispatched locally with both dispatch param and payload', () => {
+	it('actions can be dispatched locally with both dispatch param and payload', (done) => {
 		const ipcFlux = new IpcFlux({
 			actions: {
 				action1: ({ dispatch }, payload) => {
@@ -80,10 +84,11 @@ describe('Renderer Process', () => {
 
 		ipcFlux.dispatch('action1', 'hello').then((data) => {
 			expect(data).to.equal('hello');
+			done();
 		});
 	});
 
-	it('chain of actions and dispatches return expected result', () => {
+	it('chain of actions and dispatches return expected result', (done) => {
 		const ipcFlux = new IpcFlux({
 			actions: {
 				action1: ({ dispatch }, payload) => {
@@ -106,6 +111,7 @@ describe('Renderer Process', () => {
 
 		ipcFlux.dispatch('action1', 'chain dispatch').then((data) => {
 			expect(data).to.equal('chain dispatch');
+			done();
 		});
 	});
 
@@ -132,6 +138,14 @@ describe('Renderer Process', () => {
 
 		ipcFlux.dispatch('action2').then((data) => {
 			expect(data).to.equal('action2');
+		});
+	});
+
+	it('dispatchExternal (renderer --> main) returns expected result', (done) => {
+		const ipcFlux = new IpcFlux();
+		ipcFlux.dispatchExternal('action1').then((data) => {
+			expect(data).to.equal('action1 main');
+			done();
 		});
 	});
 });
