@@ -180,6 +180,11 @@ var IpcFlux = function () {
 		Object.keys(actions).forEach(function (action) {
 			_this.registerAction(action, actions[action]);
 		});
+
+		this.debug = {
+			process: Process.type(),
+			channels: channels
+		};
 	}
 
 	_createClass(IpcFlux, [{

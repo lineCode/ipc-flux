@@ -159,6 +159,11 @@ class IpcFlux {
 		Object.keys(actions).forEach((action) => {
 			this.registerAction(action, actions[action]);
 		});
+
+		this.debug = {
+			process: Process.type(),
+			channels
+		}
 	}
 
 	actionExists(action) {
