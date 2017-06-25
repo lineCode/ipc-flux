@@ -12,53 +12,26 @@ var _createClass = function () { function defineProperties(target, props) { for 
 
 var _electron = require('electron');
 
+var _utils = require('./utils');
+
+var _utils2 = _interopRequireDefault(_utils);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-var isPromise = function isPromise(val) {
-	return val && typeof val.then === 'function';
-};
+var Process = _utils2.default.Process,
+    assert = _utils2.default.assert,
+    isPromise = _utils2.default.isPromise;
 
-var assert = function assert(condition, msg) {
-	if (!condition) {
-		throw new Error('[IpcFlux] ' + msg);
-	}
-};
+// predefined channels
 
-// determines process originating from
-var Process = {
-	// return the type of process as a string
-	type: function type() {
-		// running in browser/electron window
-		if (typeof process === 'undefined') {
-			return 'renderer';
-		}
-
-		// node-integration disabled
-		if (!process) {
-			return 'renderer';
-		}
-
-		// node.js
-		if (!process.type) {
-			return 'main';
-		}
-
-		return process.type === 'renderer' ? 'renderer' : 'main';
-	},
-	// explicit process type checking
-	is: function is(type) {
-		if (typeof type === 'string') {
-			return type === Process.type();
-		} else {
-			throw new TypeError('type of `type` was not string');
-		}
-	}
-
-	// predefined channels
-};var channels = {
+var channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
-	error: 'IpcFlux-Error'
+	error: 'IpcFlux-Error',
+	handshake: 'IpcFlux-Handshake',
+	handshake_return: 'IpcFlux-HandshakeReturn'
 };
 
 // remove all active IpcFlux listeners for the current process
@@ -78,7 +51,7 @@ var IpcFlux = function () {
 
 		_classCallCheck(this, IpcFlux);
 
-		if (process.env.NODE_ENV !== 'production') {
+		if (Process.env.type() !== 'production') {
 			// check if Promises can be used
 			assert(typeof Promise !== 'undefined', 'IpcFlux requires Promises to function.');
 			assert(this instanceof IpcFlux, 'IpcFlux must be called with the new operator.');
@@ -88,10 +61,18 @@ var IpcFlux = function () {
 		rmListeners();
 
 		var _options$actions = options.actions,
-		    actions = _options$actions === undefined ? {} : _options$actions;
+		    actions = _options$actions === undefined ? {} : _options$actions,
+		    _options$config = options.config,
+		    config = _options$config === undefined ? {} : _options$config;
+
+
+		this.config = _extends({
+			handshake: {
+				timeout: 10000
+			}
+		}, config);
 
 		// defined due to `this` being reassigned in arrow functions
-
 		var instance = this;
 
 		this._actions = Object.create(null);
@@ -144,7 +125,19 @@ var IpcFlux = function () {
 		// the emitter event handlers for calls and errors
 		emitter.on(channels.call, emitterCallListener);
 		emitter.on(channels.error, function (event, err) {
-			console.error(err);
+			if ((typeof err === 'undefined' ? 'undefined' : _typeof(err)) === 'object') {
+				if (err.type === 'throw') {
+					throw new Error(err.message);
+				} else if (err.type === 'console' || err.type === 'error') {
+					console.error(err.message);
+				} else if (err.type === 'warn') {
+					console.warn(err.message);
+				} else if (err.type === 'log') {
+					console.log(err.message);
+				}
+			} else {
+				console.error(err);
+			}
 		});
 
 		var dispatchAction = this.dispatchAction,
@@ -185,9 +178,83 @@ var IpcFlux = function () {
 			process: Process.type(),
 			channels: channels
 		};
+
+		this.handshake = Process.is('main') ? { done: 0, total: 0, completed: false, targets: [], timeout: this.config.handshake.timeout } : { completed: false };
+
+		this.beginHandshake();
 	}
 
 	_createClass(IpcFlux, [{
+		key: 'beginHandshake',
+		value: function beginHandshake() {
+			var handshake = this.handshake;
+
+
+			if (Process.is('main')) {
+				var handshakeListener = function handshakeListener(event, arg) {
+					handshake.total += 1;
+					handshake.targets.push(arg.target);
+
+					event.sender.send(channels.handshake_return, {
+						target: arg.target
+					});
+				};
+
+				_electron.ipcMain.on(channels.handshake, handshakeListener);
+
+				var mainHandshakeListener = function mainHandshakeListener(event, arg) {
+					if (handshake.targets.indexOf(arg.target) >= 0) {
+						handshake.done += 1;
+						handshake.completed = handshake.done === handshake.total;
+					} else {
+						console.error('[IpcFlux] handshake return from unknown BrowserWindow id');
+					}
+
+					if (handshake.completed) {
+						_electron.ipcMain.removeListener(channels.handshake_return, mainHandshakeListener);
+						_electron.ipcMain.removeListener(channels.handshake, handshakeListener);
+					}
+				};
+
+				_electron.ipcMain.on(channels.handshake_return, mainHandshakeListener);
+
+				setTimeout(function () {
+					if (!handshake.completed) {
+						_electron.webContents.getAllWebContents().forEach(function (win) {
+							win.send(channels.error, {
+								type: 'throw',
+								message: '[IpcFlux] handshake did not completed within set timeout of ' + handshake.timeout + 'ms (' + handshake.timeout / 1000 + 's)'
+							});
+						});
+						throw new Error('[IpcFlux] handshake did not completed within set timeout of ' + handshake.timeout + 'ms (' + handshake.timeout / 1000 + 's)');
+					}
+
+					_electron.ipcMain.removeAllListeners(channels.handshake);
+					_electron.ipcMain.removeAllListeners(channels.handshake_return);
+				}, handshake.timeout);
+			} else if (Process.is('renderer')) {
+				_electron.ipcRenderer.send(channels.handshake, {
+					process: Process.type(),
+					target: _electron.remote.getCurrentWindow().id
+				});
+
+				var rendererHandshakeListener = function rendererHandshakeListener(event, arg) {
+					if (arg.target === _electron.remote.getCurrentWindow().id) {
+						event.sender.send(channels.handshake_return, {
+							target: arg.target
+						});
+						handshake.completed = true;
+						_electron.ipcRenderer.removeListener(channels.handshake_return, rendererHandshakeListener);
+
+						_electron.ipcRenderer.removeAllListeners(channels.handshake);
+						_electron.ipcRenderer.removeAllListeners(channels.handshake_return);
+					}
+				};
+
+				_electron.ipcRenderer.on(channels.handshake_return, rendererHandshakeListener);
+			}
+		}
+	}, {
 		key: 'actionExists',
 		value: function actionExists(action) {
 			return !!this._actions[action];

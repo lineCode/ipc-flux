@@ -1,51 +1,15 @@
 import { ipcMain, ipcRenderer, webContents, remote } from 'electron';
 
-const isPromise = (val) => {
-	return val && typeof val.then === 'function';
-}
-
-const assert = (condition, msg) => {
-	if (!condition) {
-		throw new Error(`[IpcFlux] ${msg}`);
-	}
-}
-
-// determines process originating from
-const Process = {
-	// return the type of process as a string
-	type: () => {
-		// running in browser/electron window
-		if (typeof process === 'undefined') {
-			return 'renderer';
-		}
-
-		// node-integration disabled
-		if (!process) {
-			return 'renderer';
-		}
-
-		// node.js
-		if (!process.type) {
-			return 'main';
-		}
-
-		return process.type === 'renderer' ? 'renderer' : 'main';
-	},
-	// explicit process type checking
-	is: (type) => {
-		if (typeof type === 'string') {
-			return type === Process.type();
-		} else {
-			throw new TypeError('type of `type` was not string');
-		}
-	}
-}
+import utils from './utils';
+const { Process, assert, isPromise } = utils;
 
 // predefined channels
 const channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
-	error: 'IpcFlux-Error'
+	error: 'IpcFlux-Error',
+	handshake: 'IpcFlux-Handshake',
+	handshake_return: 'IpcFlux-HandshakeReturn'
 };
 
 // remove all active IpcFlux listeners for the current process
@@ -59,7 +23,7 @@ const rmListeners = () => {
 
 class IpcFlux {
 	constructor(options = {}) {
-		if (process.env.NODE_ENV !== 'production') {
+		if (Process.env.type() !== 'production') {
 			// check if Promises can be used
 			assert(typeof Promise !== 'undefined', 'IpcFlux requires Promises to function.');
 			assert(this instanceof IpcFlux, 'IpcFlux must be called with the new operator.');
@@ -68,7 +32,14 @@ class IpcFlux {
 		// remove IpcFlux listeners
 		rmListeners();
 
-		const { actions={} } = options;
+		const { actions={}, config={} } = options;
+
+		this.config = {
+			handshake: {
+				timeout: 10000
+			},
+			...config
+		}
 
 		// defined due to `this` being reassigned in arrow functions
 		const instance = this;
@@ -125,7 +96,19 @@ class IpcFlux {
 		// the emitter event handlers for calls and errors
 		emitter.on(channels.call, emitterCallListener);
 		emitter.on(channels.error, (event, err) => {
-			console.error(err);
+			if (typeof err === 'object') {
+				if (err.type === 'throw') {
+					throw new Error(err.message);
+				} else if (err.type === 'console' || err.type === 'error') {
+					console.error(err.message);
+				} else if (err.type === 'warn') {
+					console.warn(err.message);
+				} else if (err.type === 'log') {
+					console.log(err.message);
+				}
+			} else {
+				console.error(err);
+			}
 		});
 
 		const { dispatchAction, dispatchExternalAction } = this;
@@ -163,6 +146,78 @@ class IpcFlux {
 		this.debug = {
 			process: Process.type(),
 			channels
+		}
+
+		this.handshake = Process.is('main') ? { done: 0, total: 0, completed: false, targets: [], timeout: this.config.handshake.timeout } : { completed: false }
+
+		this.beginHandshake();
+	}
+
+	beginHandshake() {
+		const { handshake } = this;
+
+		if (Process.is('main')) {
+			const handshakeListener = (event, arg) => {
+				handshake.total += 1;
+				handshake.targets.push(arg.target);
+
+				event.sender.send(channels.handshake_return, {
+					target: arg.target
+				});
+			}
+
+			ipcMain.on(channels.handshake, handshakeListener);
+
+			const mainHandshakeListener = (event, arg) => {
+				if (handshake.targets.indexOf(arg.target) >= 0) {
+					handshake.done += 1;
+					handshake.completed = (handshake.done === handshake.total);
+				} else {
+					console.error('[IpcFlux] handshake return from unknown BrowserWindow id');
+				}
+
+				if (handshake.completed) {
+					ipcMain.removeListener(channels.handshake_return, mainHandshakeListener);
+					ipcMain.removeListener(channels.handshake, handshakeListener);
+				}
+			}
+
+			ipcMain.on(channels.handshake_return, mainHandshakeListener);
+
+			setTimeout(() => {
+				if (!handshake.completed) {
+					webContents.getAllWebContents().forEach((win) => {
+						win.send(channels.error, {
+							type: 'throw',
+							message: `[IpcFlux] handshake did not completed within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`
+						});
+					});
+					throw new Error(`[IpcFlux] handshake did not completed within set timeout of ${handshake.timeout}ms (${handshake.timeout / 1000}s)`);
+				}
+
+				ipcMain.removeAllListeners(channels.handshake);
+				ipcMain.removeAllListeners(channels.handshake_return);
+			}, handshake.timeout);
+		} else if (Process.is('renderer')) {
+			ipcRenderer.send(channels.handshake, {
+				process: Process.type(),
+				target: remote.getCurrentWindow().id
+			});
+
+			const rendererHandshakeListener = (event, arg) => {
+				if (arg.target === remote.getCurrentWindow().id) {
+					event.sender.send(channels.handshake_return, {
+						target: arg.target
+					});
+					handshake.completed = true;
+					ipcRenderer.removeListener(channels.handshake_return, rendererHandshakeListener);
+
+					ipcRenderer.removeAllListeners(channels.handshake);
+					ipcRenderer.removeAllListeners(channels.handshake_return);
+				}
+			}
+
+			ipcRenderer.on(channels.handshake_return, rendererHandshakeListener);
 		}
 	}
 

@@ -94,6 +94,19 @@ ipcFlux.dispatchExternal('init').then((data) => {
 });
 ```
 
+### Config (Main)
+
+```js
+const ipcflux = new IpcFlux({
+	config: {
+		handshake: {
+			timeout: 10000 // default [10000]
+		}
+	}
+})
+
+```
+
 ### Example
 
 ```js
