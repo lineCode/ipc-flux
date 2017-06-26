@@ -141,10 +141,85 @@ describe('Renderer Process', () => {
 		});
 	});
 
-	it('dispatchExternal (renderer --> main) returns expected result', (done) => {
+	it('actions can be dispatched externally (renderer --> main)', (done) => {
 		const ipcFlux = new IpcFlux();
 		ipcFlux.dispatchExternal('action1').then((data) => {
 			expect(data).to.equal('action1 main');
+			done();
+		});
+	});
+
+	it('actions can be dispatched externally (renderer --> main) with dispatch param', (done) => {
+		const ipcFlux = new IpcFlux({
+			actions: {
+				action1: () => {
+					return 'action1 renderer';
+				}
+			}
+		});
+
+		ipcFlux.dispatchExternal('action2').then((data) => {
+			expect(data).to.equal('action1 main');
+			done();
+		});
+	});
+
+	it('actions can be dispatched externally (renderer --> main) with dispatchExternal param', (done) => {
+		const ipcFlux = new IpcFlux({
+			actions: {
+				action1: () => {
+					return 'action1 renderer';
+				}
+			}
+		});
+
+		ipcFlux.dispatchExternal('action3').then((data) => {
+			expect(data).to.equal('action1 renderer');
+			done();
+		});
+	});
+
+	it('actions can be dispatched externally (renderer --> main) with dispatch param and payload', (done) => {
+		const ipcFlux = new IpcFlux({
+			actions: {
+				action1: () => {
+					return 'action1 renderer';
+				}
+			}
+		});
+
+		ipcFlux.dispatchExternal('action4', 'payload').then((data) => {
+			expect(data).to.equal('payload');
+			done();
+		});
+	});
+
+	it('actions can be dispatched externally (renderer --> main) with dispatchExternal param and payload', (done) => {
+		const ipcFlux = new IpcFlux({
+			actions: {
+				action1: ({}, payload) => {
+					return payload;
+				}
+			}
+		});
+
+		ipcFlux.dispatchExternal('action5', 'payload').then((data) => {
+			expect(data).to.equal('payload');
+			done();
+		});
+	});
+
+	it('actions can be dispatched externally (renderer --> main) with dispatch, dispatchExternal param and payload', (done) => {
+		const ipcFlux = new IpcFlux({
+			actions: {
+				action1: ({}, payload) => {
+					return payload;
+				}
+			}
+		});
+
+		ipcFlux.dispatchExternal('action6', 'payload').then((data) => {
+			expect(data).to.equal('payloadpayload');
 			done();
 		});
 	});

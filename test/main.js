@@ -12,6 +12,30 @@ const ipcFlux = new IpcFlux({
 	actions: {
 		action1: () => {
 			return 'action1 main';
+		},
+		action2: ({ dispatch }) => {
+			return dispatch('action1');
+		},
+		action3: ({ dispatchExternal }) => {
+			return dispatchExternal(2, 'action1');
+		},
+		actions3point5: ({}, payload) => {
+			return payload;
+		},
+		action4: ({ dispatch }, payload) => {
+			return dispatch('actions3point5', payload);
+		},
+		action5: ({ dispatchExternal }, payload) => {
+			return dispatchExternal(2, 'action1', payload);
+		},
+		action6: ({ dispatch, dispatchExternal }, payload) => {
+			return new Promise((resolve) => {
+				dispatchExternal(2, 'action1', payload).then((data) => {
+					return dispatch('actions3point5', data);
+				}).then((data) => {
+					resolve(data + payload);
+				});
+			});
 		}
 	}
 });

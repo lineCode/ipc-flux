@@ -14,7 +14,7 @@
 //	MIT license
 //
 
-import { ipcMain, ipcRenderer, webContents, remote } from 'electron';
+import { ipcMain, ipcRenderer, webContents, BrowserWindow, remote } from 'electron';
 
 import utils from './utils';
 const { Process, assert, isPromise } = utils;
@@ -138,15 +138,15 @@ class IpcFlux {
 		this.dispatch = (type, payload) => {
 			return dispatchAction.call(instance, {
 				process: Process.type(),
-				target: Process.is('renderer') ? remote.getCurrentWindow().id : null
+				target: Process.is('renderer') ? remote.getCurrentWindow().id : 0
 			}, type, payload);
 		}
 
 		this.dispatchExternal = (target, action, payload) => {
 			// return a promise of the dispatch, resolving on callback
-			return new Promise((resolve) => {
-				dispatchExternalAction.call(instance, target, action, payload);
+			dispatchExternalAction.call(instance, target, action, payload);
 
+			return new Promise((resolve) => {
 				// only resolve if the action callback is the same as that called, then remove the callback handler
 				const listener = (event, arg) => {
 					if (Process.is('renderer') ? arg.action === target : arg.action === action) {
@@ -335,59 +335,53 @@ class IpcFlux {
 			callType: 'action'
 		};
 
+		let { target, action, payload } = {
+			target: _target,
+			action: _action,
+			payload: _payload
+		}
+
 		if (Process.is('main')) {
 			// checks target is an instance of BrowserWindow, or if is a BrowserWindow id
-			if (typeof _target === 'object' || typeof _target === 'number') {} else {
+			if (typeof target === 'object' || typeof target === 'number') {} else {
 				console.error('[IpcFlux] target passed is not instanceof BrowserWindow or an active BrowserWindow\'s id');
 				return;
 			}
 
 			// converts BrowserWindow or BrowserWindow id to webContents for instance checking
-			_target = typeof _target === 'number' ? webContents.fromId(_target) : webContents in _target ? _target.webContents : {}
+			target = typeof target === 'number' ? webContents.fromId(target) : target.webContents;
 
-			if(!(_target instanceof webContents)) {
+			if(!target.webContents) {
 				console.error('[IpcFlux] target passed is not an instanceof BrowserWindow or an active BrowserWindow\'s id');
 				return;
 			}
 
-			if (typeof _action !== 'string') {
+			if (typeof action !== 'string') {
 				console.error('[IpcFlux] action not passed as parameter');
 				return;
 			}
 
-			// add the payload to `arg` if not undefined
-			if (typeof _payload !== 'undefined') {
-				arg.payload = _payload;
-			}
-			webContents.fromId(_target.webContents.id).send(channels.call, {
+			webContents.fromId(target.webContents.id).send(channels.call, {
 				...arg,
-				action: _action,
+				action,
+				payload,
 				// send the target BrowserWindow id for callback and error handling
-				target: _target.webContents.id
+				target: target.webContents.id
 			});
 		} else if (Process.is('renderer')) {
-			// _target param is action, and _action param is payload because renderer process does not require target BrowserWindow to be passed
-			const { _action, _payload } = {
-				_action: _target,
-				_payload: _action
-			};
-
-			if (typeof _action !== 'string') {
+			// target param is action, and action param is payload because renderer process does not require target BrowserWindow to be passed
+			if (typeof target !== 'string') {
 				console.error('[IpcFlux] action not passed as parameter');
 				return;
-			}
-
-			// add the payload to `arg` if not undefined
-			if (typeof _payload !== 'undefined') {
-				arg.payload = _payload;
 			}
 
 			// send a call to the main process to dispatch the action
 			ipcRenderer.send(channels.call, {
 				...arg,
-				action: _action,
+				action: target,
+				payload: action,
 				// send the current BrowserWindow id for callback and error handling
-				target: remote.getCurrentWindow().id
+				target: remote.getCurrentWindow().id,
 			});
 		}
 	}
