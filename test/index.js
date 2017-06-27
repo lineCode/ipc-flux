@@ -4,9 +4,15 @@ require('babel-register')({
 });
 
 // allow chai api's globally
-const { expect, should, assert } = require('chai');
+const chai = require('chai');
+const chaiAsPromised = require("chai-as-promised");
+
+chai.use(chaiAsPromised);
+
+const { expect, should, assert } = chai;
+
 global.expect = expect;
-global.should = should;
+global.should = should();
 global.assert = assert;
 
 global.IpcFlux = require('../build/index.js').default;

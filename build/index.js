@@ -102,7 +102,7 @@ var IpcFlux = function () {
 			if (instance.actionExists(arg.action)) {
 				var target = Process.is('renderer') ? _electron.remote.getCurrentWindow().id : arg.target;
 
-				var act = instance.dispatchAction(_extends({}, arg, { target: target }), arg.action, arg.payload);
+				var act = dispatch.call(instance, _extends({}, arg, { target: target }), arg.action, arg.payload);
 
 				if (isPromise(act)) {
 					// on Promise complete, send a callback to the dispatcher
@@ -160,12 +160,12 @@ var IpcFlux = function () {
 			}
 		});
 
-		var dispatchAction = this.dispatchAction,
-		    dispatchExternalAction = this.dispatchExternalAction;
+		var dispatch = this.dispatch,
+		    dispatchExternal = this.dispatchExternal;
 
 
 		this.dispatch = function (type, payload) {
-			return dispatchAction.call(instance, {
+			return dispatch.call(instance, {
 				process: Process.type(),
 				target: Process.is('renderer') ? _electron.remote.getCurrentWindow().id : 0
 			}, type, payload);
@@ -173,7 +173,7 @@ var IpcFlux = function () {
 
 		this.dispatchExternal = function (target, action, payload) {
 			// return a promise of the dispatch, resolving on callback
-			dispatchExternalAction.call(instance, target, action, payload);
+			dispatchExternal.call(instance, target, action, payload);
 
 			return new Promise(function (resolve) {
 				// only resolve if the action callback is the same as that called, then remove the callback handler
@@ -205,12 +205,14 @@ var IpcFlux = function () {
 			completed: false,
 			callbacks_sent: 0,
 			targets: [],
-			timeout: this._config.handshake.timeout
+			timeout: this._config.handshake.timeout,
+			promise: null
 		} : {
 			completed: false,
 			timeout: this._config.handshake.timeout,
 			initiated: false,
-			callback_received: false
+			callback_received: false,
+			promise: null
 
 			// start the handshaking process
 		};this.beginHandshake();
@@ -255,34 +257,51 @@ var IpcFlux = function () {
 
 				_electron.ipcMain.on(channels.handshake.success, mainHandshakeListener);
 
-				// called to check if handshakes have been completed
-				setTimeout(function () {
-					handshake.completed = handshake.done === handshake.total;
+				handshake.promise = new Promise(function (resolve, reject) {
+					// called to check if handshakes have been completed
+					var handshakeCheck = setInterval(function () {
+						handshake.completed = handshake.done === handshake.total;
 
-					if (!handshake.completed) {
-						var cause = void 0;
-						if (handshake.callbacks_sent < handshake.total || handshake.callbacks_sent < handshake.targets.length) {
-							cause = 'not all callbacks were returned';
-						} else if (handshake.done < handshake.total) {
-							cause = 'not all initiated handshakes completed';
-						} else {
-							cause = 'unknown error';
+						if (handshake.completed) {
+							clearInterval(handshakeCheck);
+							resolve();
 						}
+					}, 100 < handshake.timeout ? handshake.timeout / 10 : 100);
 
-						// send error to all windows
-						_electron.webContents.getAllWebContents().forEach(function (win) {
-							win.send(channels.error, {
-								type: 'throw',
-								message: '[IpcFlux] handshake failed (timeout): ' + cause
-							});
-						});
-						throw new Error('[IpcFlux] handshake failed (timeout): ' + cause);
-					}
-
+					setTimeout(function () {
+						clearInterval(handshakeCheck);
+						reject();
+					}, handshake.timeout);
+				}).then(function () {
 					// remove all main handshake listeners
 					_electron.ipcMain.removeAllListeners(channels.handshake.default);
+					_electron.ipcMain.removeAllListeners(channels.handshake.callback);
 					_electron.ipcMain.removeAllListeners(channels.handshake.success);
-				}, handshake.timeout);
+
+					return true;
+				}).catch(function () {
+					// remove all main handshake listeners
+					_electron.ipcMain.removeAllListeners(channels.handshake.default);
+					_electron.ipcMain.removeAllListeners(channels.handshake.callback);
+					_electron.ipcMain.removeAllListeners(channels.handshake.success);
+
+					var cause = void 0;
+					if (handshake.callbacks_sent < handshake.total || handshake.callbacks_sent < handshake.targets.length) {
+						cause = 'not all callbacks were returned';
+					} else if (handshake.done < handshake.total) {
+						cause = 'not all initiated handshakes completed';
+					} else {
+						cause = 'unknown error';
+					}
+					// send error to all windows
+					_electron.webContents.getAllWebContents().forEach(function (win) {
+						win.send(channels.error, {
+							type: 'throw',
+							message: '[IpcFlux] handshake failed (timeout): ' + err
+						});
+					});
+					throw new Error('[IpcFlux] handshake failed (timeout): ' + err);
+				});
 			} else if (Process.is('renderer')) {
 				// initiate the handshake
 				_electron.ipcRenderer.send(channels.handshake.default, {
@@ -291,8 +310,8 @@ var IpcFlux = function () {
 				handshake.initiated = true;
 
 				var rendererHandshakeListener = function rendererHandshakeListener(event, arg) {
-					handshake.callback_received = true;
 					if (arg.target === _electron.remote.getCurrentWindow().id) {
+						handshake.callback_received = true;
 						// return the handshake, verifies in main process handshake is complete
 						event.sender.send(channels.handshake.success, {
 							target: arg.target
@@ -309,26 +328,42 @@ var IpcFlux = function () {
 
 				_electron.ipcRenderer.on(channels.handshake.callback, rendererHandshakeListener);
 
-				// called to check if this handshake has been completed
-				setTimeout(function () {
-					if (!handshake.done) {
-						var cause = void 0;
-						if (handshake.initiated === false) {
-							cause = 'handshake not initiated';
-						} else if (handshake.callback_received === false) {
-							cause = 'handshake callback not received';
-						} else if (handshake.completed === false) {
-							cause = 'handshake was not completed';
-						} else {
-							cause = 'unknown error';
+				handshake.promise = new Promise(function (resolve, reject) {
+					var handshakeCheck = setInterval(function () {
+						if (handshake.done) {
+							clearInterval(handshakeCheck);
+							resolve();
 						}
-						throw new Error('[IpcFlux] handshake failed (timeout): ' + cause);
-					}
+					}, 100 < handshake.timeout ? handshake.timeout / 10 : 100);
 
+					setTimeout(function () {
+						clearInterval(handshakeCheck);
+						reject();
+					}, handshake.timeout);
+				}).then(function () {
 					// remove all renderer handshake listeners
-					_electron.ipcRenderer.removeAllListeners(channels.handshake);
+					_electron.ipcRenderer.removeAllListeners(channels.handshake.default);
 					_electron.ipcRenderer.removeAllListeners(channels.handshake.callback);
-				}, handshake.timeout);
+					_electron.ipcRenderer.removeAllListeners(channels.handshake.success);
+					return true;
+				}).catch(function () {
+					// remove all renderer handshake listeners
+					_electron.ipcRenderer.removeAllListeners(channels.handshake.default);
+					_electron.ipcRenderer.removeAllListeners(channels.handshake.callback);
+					_electron.ipcRenderer.removeAllListeners(channels.handshake.success);
+
+					var cause = void 0;
+					if (handshake.initiated === false) {
+						cause = 'handshake not initiated';
+					} else if (handshake.callback_received === false) {
+						cause = 'handshake callback not received';
+					} else if (handshake.completed === false) {
+						cause = 'handshake was not completed';
+					} else {
+						cause = 'unknown error';
+					}
+					throw new Error('[IpcFlux] handshake failed (timeout): ' + cause);
+				});
 			}
 		}
 	}, {
@@ -337,8 +372,8 @@ var IpcFlux = function () {
 			return !!this._actions[action];
 		}
 	}, {
-		key: 'dispatchAction',
-		value: function dispatchAction(_caller, _action, _payload) {
+		key: 'dispatch',
+		value: function dispatch(_caller, _action, _payload) {
 			var _action$payload = {
 				action: _action,
 				payload: _payload
@@ -365,8 +400,8 @@ var IpcFlux = function () {
 			})) : entry[0](payload);
 		}
 	}, {
-		key: 'dispatchExternalAction',
-		value: function dispatchExternalAction(_target, _action, _payload) {
+		key: 'dispatchExternal',
+		value: function dispatchExternal(_target, _action, _payload) {
 			// same for both process types
 			var arg = {
 				process: Process.type(),
