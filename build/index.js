@@ -8,7 +8,8 @@ var _extends = Object.assign || function (target) { for (var i = 1; i < argument
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; //     _                  _____
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; //
+//     _                  _____
 //    (_)__  ____  ____  / _/ /_ ____ __
 //   / / _ \/ __/ /___/ / _/ / // /\ \ /
 //  /_/ .__/\__/       /_//_/\_,_//_\_\
@@ -22,6 +23,7 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
 //	@harryparkdotio - harry@harrypark.io
 //
 //	MIT license
+//
 //
 
 var _electron = require('electron');
@@ -47,7 +49,8 @@ var channels = {
 	handshake: {
 		default: 'IpcFlux-Handshake',
 		callback: 'IpcFlux-Handshake-Callback',
-		success: 'IpcFlux-Handshake-Success'
+		success: 'IpcFlux-Handshake-Success',
+		finish: 'IpcFlux-Handshake-Finish'
 	}
 };
 
@@ -92,9 +95,11 @@ var IpcFlux = function () {
 		this._config = Object.create(null);
 
 		this._config = _extends({
+			maxListeners: 50,
 			handshake: {
 				timeout: 10000
-			}
+			},
+			debug: false
 		}, config);
 
 		// the listener to be called for actions
@@ -142,18 +147,28 @@ var IpcFlux = function () {
 		// define the process emitter, minimizes code duplication
 		var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
 
+		emitter.setMaxListeners(this._config.maxListeners);
+
 		// the emitter event handlers for calls and errors
 		emitter.on(channels.call, emitterCallListener);
 		emitter.on(channels.error, function (event, err) {
 			if ((typeof err === 'undefined' ? 'undefined' : _typeof(err)) === 'object') {
-				if (err.type === 'throw') {
-					throw new Error(err.message);
-				} else if (err.type === 'console' || err.type === 'error') {
-					console.error(err.message);
-				} else if (err.type === 'warn') {
-					console.warn(err.message);
-				} else if (err.type === 'log') {
-					console.log(err.message);
+				switch (err.type) {
+					case 'throw':
+						throw new Error(err.message);
+						break;
+					case 'warn':
+						console.warn(err.message);
+						break;
+					case 'warning':
+						console.warn(err.message);
+						break;
+					case 'log':
+						console.log(err.message);
+						break;
+					default:
+						console.error(err.message);
+						break;
 				}
 			} else {
 				console.error(err);
@@ -175,12 +190,14 @@ var IpcFlux = function () {
 			// return a promise of the dispatch, resolving on callback
 			dispatchExternal.call(instance, target, action, payload);
 
-			return new Promise(function (resolve) {
+			return new Promise(function (resolve, reject) {
 				// only resolve if the action callback is the same as that called, then remove the callback handler
 				var listener = function listener(event, arg) {
 					if (Process.is('renderer') ? arg.action === target : arg.action === action) {
 						emitter.removeListener(channels.callback, listener);
 						resolve(arg.data);
+					} else {
+						reject();
 					}
 				};
 
@@ -200,169 +217,113 @@ var IpcFlux = function () {
 
 			// define the handshake config, specific to the process type
 		};this.handshake = Process.is('main') ? {
-			done: 0,
-			total: 0,
-			completed: false,
-			callbacks_sent: 0,
-			targets: [],
 			timeout: this._config.handshake.timeout,
-			promise: null
+			targets: []
 		} : {
-			completed: false,
 			timeout: this._config.handshake.timeout,
 			initiated: false,
-			callback_received: false,
+			pending: false,
+			completed: false,
 			promise: null
 
 			// start the handshaking process
 		};this.beginHandshake();
+
+		this.endHandshake = function () {
+			// remove all handshake listeners
+			var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
+
+			Object.values(channels.handshake).forEach(function (channel) {
+				emitter.removeAllListeners(channel);
+			});
+		};
 	}
 
 	_createClass(IpcFlux, [{
 		key: 'beginHandshake',
 		value: function beginHandshake() {
+			var instance = this;
 			var handshake = this.handshake;
 
 
 			if (Process.is('main')) {
-				var handshakeListener = function handshakeListener(event, arg) {
-					handshake.total += 1;
-					// add target to targets, used to determine which handshakes pass/fail
-					handshake.targets.push(arg.target);
+				_electron.ipcMain.on(channels.handshake.default, function (event, arg) {
+					var targ = arg.target;
+
+					var handshakePromise = new Promise(function (resolve, reject) {
+						_electron.ipcMain.on(channels.handshake.success, function (event, arg) {
+							if (arg.target === targ) {
+								resolve(targ);
+							}
+						});
+
+						setTimeout(function () {
+							reject(targ);
+						}, handshake.timeout);
+					}).then(function (target) {
+						_electron.webContents.fromId(target).send(channels.handshake.finish, {
+							target: target
+						});
+
+						return true;
+					}).catch(function (target) {
+						_electron.webContents.fromId(target).send(channels.error, {
+							type: 'error',
+							message: 'handshake failed'
+						});
+
+						console.error('handshake failed: BrowserWindow (' + target + ')');
+					});
+
+					handshake.targets.push({
+						target: targ,
+						promise: handshakePromise
+					});
 
 					// return handshake with target
 					event.sender.send(channels.handshake.callback, {
 						target: arg.target
 					});
-				};
-
-				// create a listener, each handshake is initiated from the renderer
-				_electron.ipcMain.on(channels.handshake.default, handshakeListener);
-
-				var mainHandshakeListener = function mainHandshakeListener(event, arg) {
-					// if the target has already been added (initial handshake successful)
-					if (handshake.targets.indexOf(arg.target) >= 0) {
-						handshake.done += 1;
-						handshake.completed = handshake.done === handshake.total;
-					} else {
-						console.error('[IpcFlux] handshake return from unknown BrowserWindow id');
-					}
-
-					if (handshake.completed) {
-						// remove this handshake listener
-						_electron.ipcMain.removeListener(channels.handshake.success, mainHandshakeListener);
-						_electron.ipcMain.removeListener(channels.handshake.default, handshakeListener);
-					}
-				};
-
-				_electron.ipcMain.on(channels.handshake.success, mainHandshakeListener);
-
-				handshake.promise = new Promise(function (resolve, reject) {
-					// called to check if handshakes have been completed
-					var handshakeCheck = setInterval(function () {
-						handshake.completed = handshake.done === handshake.total;
-
-						if (handshake.completed) {
-							clearInterval(handshakeCheck);
-							resolve();
-						}
-					}, 100 < handshake.timeout ? handshake.timeout / 10 : 100);
-
-					setTimeout(function () {
-						clearInterval(handshakeCheck);
-						reject();
-					}, handshake.timeout);
-				}).then(function () {
-					// remove all main handshake listeners
-					_electron.ipcMain.removeAllListeners(channels.handshake.default);
-					_electron.ipcMain.removeAllListeners(channels.handshake.callback);
-					_electron.ipcMain.removeAllListeners(channels.handshake.success);
-
-					return true;
-				}).catch(function () {
-					// remove all main handshake listeners
-					_electron.ipcMain.removeAllListeners(channels.handshake.default);
-					_electron.ipcMain.removeAllListeners(channels.handshake.callback);
-					_electron.ipcMain.removeAllListeners(channels.handshake.success);
-
-					var cause = void 0;
-					if (handshake.callbacks_sent < handshake.total || handshake.callbacks_sent < handshake.targets.length) {
-						cause = 'not all callbacks were returned';
-					} else if (handshake.done < handshake.total) {
-						cause = 'not all initiated handshakes completed';
-					} else {
-						cause = 'unknown error';
-					}
-					// send error to all windows
-					_electron.webContents.getAllWebContents().forEach(function (win) {
-						win.send(channels.error, {
-							type: 'throw',
-							message: '[IpcFlux] handshake failed (timeout): ' + err
-						});
-					});
-					throw new Error('[IpcFlux] handshake failed (timeout): ' + err);
 				});
 			} else if (Process.is('renderer')) {
+				var targ = _electron.remote.getCurrentWindow().id;
+
 				// initiate the handshake
 				_electron.ipcRenderer.send(channels.handshake.default, {
-					target: _electron.remote.getCurrentWindow().id
+					target: targ
 				});
-				handshake.initiated = true;
 
-				var rendererHandshakeListener = function rendererHandshakeListener(event, arg) {
-					if (arg.target === _electron.remote.getCurrentWindow().id) {
-						handshake.callback_received = true;
+				handshake.promise = new Promise(function (resolve, reject) {
+					_electron.ipcRenderer.on(channels.handshake.finish, function (event, arg) {
+						if (arg.target === targ) {
+							handshake.completed = true;
+							handshake.pending = false;
+							resolve(true);
+						}
+					});
+
+					setTimeout(function () {
+						reject(false);
+					}, handshake.timeout);
+				}).catch(function () {
+					_electron.ipcRenderer.send(channels.error, {
+						type: 'error',
+						message: 'handshake failed: BrowserWindow (' + _electron.remote.getCurrentWindow().id + ')'
+					});
+
+					console.error('handshake failed');
+				});
+
+				handshake.initiated = true;
+				handshake.pending = true;
+
+				_electron.ipcRenderer.once(channels.handshake.callback, function (event, arg) {
+					if (arg.target === targ) {
 						// return the handshake, verifies in main process handshake is complete
 						event.sender.send(channels.handshake.success, {
 							target: arg.target
 						});
-						handshake.completed = true;
-						// remove this listener
-						_electron.ipcRenderer.removeListener(channels.handshake.callback, rendererHandshakeListener);
-
-						// remove all renderer handshake listeners
-						_electron.ipcRenderer.removeAllListeners(channels.handshake.default);
-						_electron.ipcRenderer.removeAllListeners(channels.handshake.callback);
 					}
-				};
-
-				_electron.ipcRenderer.on(channels.handshake.callback, rendererHandshakeListener);
-
-				handshake.promise = new Promise(function (resolve, reject) {
-					var handshakeCheck = setInterval(function () {
-						if (handshake.done) {
-							clearInterval(handshakeCheck);
-							resolve();
-						}
-					}, 100 < handshake.timeout ? handshake.timeout / 10 : 100);
-
-					setTimeout(function () {
-						clearInterval(handshakeCheck);
-						reject();
-					}, handshake.timeout);
-				}).then(function () {
-					// remove all renderer handshake listeners
-					_electron.ipcRenderer.removeAllListeners(channels.handshake.default);
-					_electron.ipcRenderer.removeAllListeners(channels.handshake.callback);
-					_electron.ipcRenderer.removeAllListeners(channels.handshake.success);
-					return true;
-				}).catch(function () {
-					// remove all renderer handshake listeners
-					_electron.ipcRenderer.removeAllListeners(channels.handshake.default);
-					_electron.ipcRenderer.removeAllListeners(channels.handshake.callback);
-					_electron.ipcRenderer.removeAllListeners(channels.handshake.success);
-
-					var cause = void 0;
-					if (handshake.initiated === false) {
-						cause = 'handshake not initiated';
-					} else if (handshake.callback_received === false) {
-						cause = 'handshake callback not received';
-					} else if (handshake.completed === false) {
-						cause = 'handshake was not completed';
-					} else {
-						cause = 'unknown error';
-					}
-					throw new Error('[IpcFlux] handshake failed (timeout): ' + cause);
 				});
 			}
 		}
@@ -445,7 +406,6 @@ var IpcFlux = function () {
 					target: target.webContents.id
 				}));
 			} else if (Process.is('renderer')) {
-				// target param is action, and action param is payload because renderer process does not require target BrowserWindow to be passed
 				if (typeof target !== 'string') {
 					console.error('[IpcFlux] action not passed as parameter');
 					return;

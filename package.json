@@ -1,19 +1,22 @@
 {
   "name": "ipc-flux",
-  "version": "0.3.6",
+  "version": "0.3.9",
   "author": "Harry Park <harry@harrypark.io>",
   "description": "Flux like state & action management across electron processes (ipc).",
   "license": "MIT",
   "repository": "https://github.com/harryparkdotio/ipc-flux.git",
   "main": "build/index.js",
   "scripts": {
-    "build": "./node_modules/babel-cli/bin/babel.js --presets=es2015,stage-0 src/ --out-dir build/ --source-maps",
+    "build": "./node_modules/.bin/babel --presets=es2015,stage-0 src/ --out-dir build/ --source-maps",
+    "test:main": "./node_modules/.bin/electron-mocha --require test/index.js test/specs/main.spec.js",
+    "test:renderer": "./node_modules/.bin/electron-mocha --require test/index.js --require-main test/main.js --renderer test/specs/renderer.spec.js",
+    "test": "npm run test:main && npm run test:renderer",
+    "example": "electron ./example",
+
     "pretest": "npm run build",
-    "pretest:main": "npm run build --silent",
-    "pretest:renderer": "npm run build --silent",
-    "test:main": "./node_modules/electron-mocha/bin/electron-mocha --require test/index.js --require-main test/main.js --preload test/renderer.js test/specs/main.spec.js",
-    "test:renderer": "./node_modules/electron-mocha/bin/electron-mocha --require test/index.js --require-main test/main.js --renderer test/specs/renderer.spec.js",
-    "test": "npm run test:main --silent && npm run test:renderer --silent"
+    "pretest:renderer": "npm run build",
+    "pretest:main": "npm run build",
+    "preexample": "npm run build"
   },
   "devDependencies": {
     "babel-cli": "^6.24.1",
@@ -24,7 +27,8 @@
     "chai": "^4.0.2",
     "chai-as-promised": "^7.0.0",
     "electron-mocha": "^4.0.0",
-    "pre-push": "^0.1.1"
+    "pre-push": "^0.1.1",
+    "uglify-js": "^3.0.22"
   },
   "babel": {
     "presets": [

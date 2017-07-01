@@ -23,6 +23,20 @@ or, using `require`
 const IpcFlux = require('ipc-flux').default;
 ```
 
+### Options
+
+```js
+const ipcFlux = new IpcFlux({
+	config: {
+		debug: false, // enable/disable debug mode [default: false]
+		maxListeners: 50, // maximum ipcMain/ipcRenderer listeners [default: 50]
+		handshake: {
+			timeout: 10000 // set handshake timeout limit [default: 10000 (ms)]
+		}
+	}
+});
+```
+
 ### Defining Actions
 
 > This can be duplicated in both main and renderer processes, ipc-flux accounts for and handles this
@@ -94,19 +108,6 @@ ipcFlux.dispatchExternal('init').then((data) => {
 });
 ```
 
-### Config (Main)
-
-```js
-const ipcflux = new IpcFlux({
-	config: {
-		handshake: {
-			timeout: 10000 // default [10000]
-		}
-	}
-})
-
-```
-
 ### Example
 
 ```js
@@ -139,5 +140,6 @@ ipcFlux.dispatch('action2').then((data) => {
 - `IpcFlux-Handshake`
 - `IpcFlux-Handshake-Callback`
 - `IpcFlux-Handshake-Success`
+- `IpcFlux-Handshake-Finish`
 
 Please do **not** use the listed Ipc channels as doing so will likely interfere with the functionality of `IpcFlux`

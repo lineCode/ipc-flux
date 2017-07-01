@@ -16,7 +16,3 @@ const ipcFlux = new IpcFlux({
 
 ipcFlux.dispatch('action5')
 ipcFlux.dispatchExternal('action2')
-
-setInterval(() => {
-	console.log(ipcFlux.handshakePromise)
-}, 50);
