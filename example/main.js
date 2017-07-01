@@ -5,45 +5,48 @@ const { app, webContents, BrowserWindow, globalShortcut } = electron;
 const path = require('path')
 const url = require('url')
 
-let mainWindow
+let mainWindows = []
 
 const IpcFlux = require('../build/index.js').default;
 
 const ipcFlux = new IpcFlux({
 	actions: {
-		action1: () => {
-			console.log('\n\nmain-process::action1\n\n')
+		action1: ({ dispatchExternal }) => {
+			dispatchExternal(2, 'action2');
 		},
-		action2: () => {
-			console.log('\n\nmain-process::action2\n\n')
-		},
-		action3: () => {
-			console.log('\n\nmain-process::action3\n\n')
+		action2: ({ dispatchExternal }) => {
+			dispatchExternal(1, 'action2');
 		}
 	}
 })
 
-function createWindow () {
-	mainWindow = new BrowserWindow({
-		width: 800,
-		height: 600
+function createWindow (d) {
+	mainWindows[d] = new BrowserWindow({
+		width: 100,
+		height: 100,
+		acceptFirstMouse: true,
+		x: d === 0 ? 50 : 150,
+		y: 50
 	})
 
-	mainWindow.loadURL(`file://${__dirname}/index.html`)
+	d === 0 ? mainWindows[d].loadURL(`file://${__dirname}/index.html`) : mainWindows[d].loadURL(`file://${__dirname}/indexx.html`)
 
-	mainWindow.webContents.openDevTools()
+	// mainWindows[d].webContents.openDevTools()
 
-	mainWindow.on('closed', function () {
-		mainWindow = null
+	mainWindows[d].on('closed', function () {
+		mainWindows[d] = null
 	})
 
 	setTimeout(function() {
 		ipcFlux.dispatch('action1')
-		ipcFlux.dispatchExternal(mainWindow, 'action6')
+		ipcFlux.dispatchExternal(mainWindows[d], 'action6')
 	}, 750)
 }
 
-app.on('ready', createWindow)
+app.on('ready', () => {
+	createWindow(0)
+	createWindow(1)
+})
 
 app.on('window-all-closed', function () {
 	if (process.platform !== 'darwin') {
@@ -52,7 +55,7 @@ app.on('window-all-closed', function () {
 })
 
 app.on('activate', function () {
-	if (mainWindow === null) {
+	if (mainWindows[0] === null) {
 		createWindow()
 	}
 })

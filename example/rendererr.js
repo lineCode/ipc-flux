@@ -3,12 +3,12 @@ const IpcFlux = require('../build/index.js').default;
 const ipcFlux = new IpcFlux({
 	actions: {
 		action1: ({ dispatchExternal }) => {
-			dispatchExternal('action1');
+			dispatchExternal('action2');
 		},
 		action2: () => {
-			document.getElementById('click').style.backgroundColor = 'green';
+			document.getElementById('click').style.backgroundColor = 'yellow';
 			setTimeout(() => {
-				document.getElementById('click').style.backgroundColor = 'red';
+				document.getElementById('click').style.backgroundColor = 'blue';
 			}, 100);
 		}
 	}
