@@ -25,14 +25,9 @@ const { Process, assert, isPromise } = utils;
 const channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
-	error: 'IpcFlux-Error',
-	handshake: {
-		default: 'IpcFlux-Handshake',
-		callback: 'IpcFlux-Handshake-Callback',
-		success: 'IpcFlux-Handshake-Success',
-		finish: 'IpcFlux-Handshake-Finish'
-	}
+	error: 'IpcFlux-Error'
 };
+
 
 // remove all active IpcFlux listeners for the current process
 const rmListeners = () => {
@@ -66,9 +61,6 @@ class IpcFlux {
 
 		this._config = {
 			maxListeners: 50,
-			handshake: {
-				timeout: 10000
-			},
 			debug: false,
 			...config
 		}
@@ -186,116 +178,6 @@ class IpcFlux {
 		this.debug = {
 			process: Process.type(),
 			channels
-		}
-
-		// define the handshake config, specific to the process type
-		this.handshake = Process.is('main') ? {
-			timeout: this._config.handshake.timeout,
-			targets: []
-		} : {
-			timeout: this._config.handshake.timeout,
-			initiated: false,
-			pending: false,
-			completed: false,
-			promise: null
-		}
-
-		// start the handshaking process
-		this.beginHandshake();
-
-		this.endHandshake = () => {
-			// remove all handshake listeners
-			const emitter = Process.is('main') ? ipcMain : ipcRenderer;
-
-			Object.values(channels.handshake).forEach((channel) => {
-				emitter.removeAllListeners(channel);
-			});
-		}
-	}
-
-	beginHandshake() {
-		const instance = this;
-		const { handshake } = this;
-
-		if (Process.is('main')) {
-			ipcMain.on(channels.handshake.default, (event, arg) => {
-				const targ = arg.target;
-
-				const handshakePromise = new Promise((resolve, reject) => {
-					ipcMain.on(channels.handshake.success, (event, arg) => {
-						if (arg.target === targ) {
-							resolve(targ);
-						}
-					});
-
-					setTimeout(() => {
-						reject(targ);
-					}, handshake.timeout);
-				}).then((target) => {
-					webContents.fromId(target).send(channels.handshake.finish, {
-						target
-					});
-
-					return true;
-				}).catch((target) => {
-					webContents.fromId(target).send(channels.error, {
-						type: 'error',
-						message: 'handshake failed'
-					});
-
-					console.error(`handshake failed: BrowserWindow (${target})`);
-				});
-
-				handshake.targets.push({
-					target: targ,
-					promise: handshakePromise
-				});
-
-				// return handshake with target
-				event.sender.send(channels.handshake.callback, {
-					target: arg.target
-				});
-			});
-		} else if (Process.is('renderer')) {
-			const targ = remote.getCurrentWindow().id;
-
-			// initiate the handshake
-			ipcRenderer.send(channels.handshake.default, {
-				target: targ
-			});
-
-			handshake.promise = new Promise((resolve, reject) => {
-				ipcRenderer.on(channels.handshake.finish, (event, arg) => {
-					if (arg.target === targ) {
-						handshake.completed = true;
-						handshake.pending = false;
-						resolve(true);
-					}
-				});
-
-				setTimeout(() => {
-					reject(false);
-				}, handshake.timeout);
-			}).catch(() => {
-				ipcRenderer.send(channels.error, {
-					type: 'error',
-					message: `handshake failed: BrowserWindow (${remote.getCurrentWindow().id})`
-				});
-
-				console.error('handshake failed');
-			});
-
-			handshake.initiated = true;
-			handshake.pending = true;
-
-			ipcRenderer.once(channels.handshake.callback, (event, arg) => {
-				if (arg.target === targ) {
-					// return the handshake, verifies in main process handshake is complete
-					event.sender.send(channels.handshake.success, {
-						target: arg.target
-					});
-				}
-			});
 		}
 	}
 

@@ -1,11 +1,11 @@
-const electron = require('electron')
+const electron = require('electron');
 
 const { app, webContents, BrowserWindow, globalShortcut } = electron;
 
-const path = require('path')
-const url = require('url')
+const path = require('path');
+const url = require('url');
 
-let mainWindows = []
+let mainWindows = [];
 
 const IpcFlux = require('../build/index.js').default;
 
@@ -18,7 +18,7 @@ const ipcFlux = new IpcFlux({
 			dispatchExternal(1, 'action2');
 		}
 	}
-})
+});
 
 function createWindow (d) {
 	mainWindows[d] = new BrowserWindow({
@@ -27,35 +27,30 @@ function createWindow (d) {
 		acceptFirstMouse: true,
 		x: d === 0 ? 50 : 150,
 		y: 50
-	})
+	});
 
-	d === 0 ? mainWindows[d].loadURL(`file://${__dirname}/index.html`) : mainWindows[d].loadURL(`file://${__dirname}/indexx.html`)
+	d === 0 ? mainWindows[d].loadURL(`file://${__dirname}/index.html`) : mainWindows[d].loadURL(`file://${__dirname}/indexx.html`);
 
 	// mainWindows[d].webContents.openDevTools()
 
 	mainWindows[d].on('closed', function () {
 		mainWindows[d] = null
-	})
-
-	setTimeout(function() {
-		ipcFlux.dispatch('action1')
-		ipcFlux.dispatchExternal(mainWindows[d], 'action6')
-	}, 750)
+	});
 }
 
 app.on('ready', () => {
-	createWindow(0)
-	createWindow(1)
-})
+	createWindow(0);
+	createWindow(1);
+});
 
 app.on('window-all-closed', function () {
 	if (process.platform !== 'darwin') {
-		app.quit()
+		app.quit();
 	}
-})
+});
 
 app.on('activate', function () {
 	if (mainWindows[0] === null) {
-		createWindow()
+		createWindow();
 	}
-})
+});

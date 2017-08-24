@@ -45,13 +45,7 @@ var Process = _utils2.default.Process,
 var channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
-	error: 'IpcFlux-Error',
-	handshake: {
-		default: 'IpcFlux-Handshake',
-		callback: 'IpcFlux-Handshake-Callback',
-		success: 'IpcFlux-Handshake-Success',
-		finish: 'IpcFlux-Handshake-Finish'
-	}
+	error: 'IpcFlux-Error'
 };
 
 // remove all active IpcFlux listeners for the current process
@@ -96,9 +90,6 @@ var IpcFlux = function () {
 
 		this._config = _extends({
 			maxListeners: 50,
-			handshake: {
-				timeout: 10000
-			},
 			debug: false
 		}, config);
 
@@ -214,120 +205,10 @@ var IpcFlux = function () {
 		this.debug = {
 			process: Process.type(),
 			channels: channels
-
-			// define the handshake config, specific to the process type
-		};this.handshake = Process.is('main') ? {
-			timeout: this._config.handshake.timeout,
-			targets: []
-		} : {
-			timeout: this._config.handshake.timeout,
-			initiated: false,
-			pending: false,
-			completed: false,
-			promise: null
-
-			// start the handshaking process
-		};this.beginHandshake();
-
-		this.endHandshake = function () {
-			// remove all handshake listeners
-			var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
-
-			Object.values(channels.handshake).forEach(function (channel) {
-				emitter.removeAllListeners(channel);
-			});
 		};
 	}
 
 	_createClass(IpcFlux, [{
-		key: 'beginHandshake',
-		value: function beginHandshake() {
-			var instance = this;
-			var handshake = this.handshake;
-
-
-			if (Process.is('main')) {
-				_electron.ipcMain.on(channels.handshake.default, function (event, arg) {
-					var targ = arg.target;
-
-					var handshakePromise = new Promise(function (resolve, reject) {
-						_electron.ipcMain.on(channels.handshake.success, function (event, arg) {
-							if (arg.target === targ) {
-								resolve(targ);
-							}
-						});
-
-						setTimeout(function () {
-							reject(targ);
-						}, handshake.timeout);
-					}).then(function (target) {
-						_electron.webContents.fromId(target).send(channels.handshake.finish, {
-							target: target
-						});
-
-						return true;
-					}).catch(function (target) {
-						_electron.webContents.fromId(target).send(channels.error, {
-							type: 'error',
-							message: 'handshake failed'
-						});
-
-						console.error('handshake failed: BrowserWindow (' + target + ')');
-					});
-
-					handshake.targets.push({
-						target: targ,
-						promise: handshakePromise
-					});
-
-					// return handshake with target
-					event.sender.send(channels.handshake.callback, {
-						target: arg.target
-					});
-				});
-			} else if (Process.is('renderer')) {
-				var targ = _electron.remote.getCurrentWindow().id;
-
-				// initiate the handshake
-				_electron.ipcRenderer.send(channels.handshake.default, {
-					target: targ
-				});
-
-				handshake.promise = new Promise(function (resolve, reject) {
-					_electron.ipcRenderer.on(channels.handshake.finish, function (event, arg) {
-						if (arg.target === targ) {
-							handshake.completed = true;
-							handshake.pending = false;
-							resolve(true);
-						}
-					});
-
-					setTimeout(function () {
-						reject(false);
-					}, handshake.timeout);
-				}).catch(function () {
-					_electron.ipcRenderer.send(channels.error, {
-						type: 'error',
-						message: 'handshake failed: BrowserWindow (' + _electron.remote.getCurrentWindow().id + ')'
-					});
-
-					console.error('handshake failed');
-				});
-
-				handshake.initiated = true;
-				handshake.pending = true;
-
-				_electron.ipcRenderer.once(channels.handshake.callback, function (event, arg) {
-					if (arg.target === targ) {
-						// return the handshake, verifies in main process handshake is complete
-						event.sender.send(channels.handshake.success, {
-							target: arg.target
-						});
-					}
-				});
-			}
-		}
-	}, {
 		key: 'actionExists',
 		value: function actionExists(action) {
 			return !!this._actions[action];

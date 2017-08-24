@@ -1,11 +1,5 @@
 describe('Renderer', () => {
 	describe('setup', () => {
-		it('handshake completed', (done) => {
-			const ipcFlux = new IpcFlux();
-
-			ipcFlux.handshake.promise.should.eventually.equal(true).notify(done);
-		}).timeout(10000);
-
 		it('instance created on `new`', () => {
 			const ipcFlux = new IpcFlux();
 			expect(ipcFlux instanceof IpcFlux).to.be.true;

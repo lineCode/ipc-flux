@@ -30,9 +30,6 @@ const ipcFlux = new IpcFlux({
 	config: {
 		debug: false, // enable/disable debug mode [default: false]
 		maxListeners: 50, // maximum ipcMain/ipcRenderer listeners [default: 50]
-		handshake: {
-			timeout: 10000 // set handshake timeout limit [default: 10000 (ms)]
-		}
 	}
 });
 ```
@@ -137,9 +134,5 @@ ipcFlux.dispatch('action2').then((data) => {
 - `IpcFlux-Call`
 - `IpcFlux-Callback`
 - `IpcFlux-Error`
-- `IpcFlux-Handshake`
-- `IpcFlux-Handshake-Callback`
-- `IpcFlux-Handshake-Success`
-- `IpcFlux-Handshake-Finish`
 
-Please do **not** use the listed Ipc channels as doing so will likely interfere with the functionality of `IpcFlux`
+Please do **not** use the listed Ipc channels as doing so will probably interfere with the functionality of `IpcFlux`

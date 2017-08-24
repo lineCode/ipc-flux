@@ -16,6 +16,98 @@ var assert = function assert(condition, msg) {
 	}
 };
 
+Promise.prototype.fulfilled = function () {
+	var status = {
+		pending: true,
+		rejected: false,
+		fulfilled: false
+	};
+
+	var result = this.then(function (v) {
+		status.fulfilled = true;
+		status.pending = false;
+		return v;
+	}, function (e) {
+		status.rejected = true;
+		status.pending = false;
+		throw e;
+	});
+
+	return status.fulfilled;
+};
+
+Promise.prototype.pending = function () {
+	var status = {
+		pending: true,
+		rejected: false,
+		fulfilled: false
+	};
+
+	var result = this.then(function (v) {
+		status.fulfilled = true;
+		status.pending = false;
+		return v;
+	}, function (e) {
+		status.rejected = true;
+		status.pending = false;
+		throw e;
+	});
+
+	return status.pending;
+};
+
+Promise.prototype.rejected = function () {
+	var status = {
+		pending: true,
+		rejected: false,
+		fulfilled: false
+	};
+
+	var result = this.then(function (v) {
+		status.fulfilled = true;
+		status.pending = false;
+		return v;
+	}, function (e) {
+		status.rejected = true;
+		status.pending = false;
+		throw e;
+	});
+
+	return status.rejected;
+};
+
+function MakeQuerablePromise(promise) {
+	// Don't modify any promise that has been already modified.
+	if (promise.isResolved) return promise;
+
+	// Set initial state
+	var isPending = true;
+	var isRejected = false;
+	var isFulfilled = false;
+
+	// Observe the promise, saving the fulfillment in a closure scope.
+	var result = promise.then(function (v) {
+		isFulfilled = true;
+		isPending = false;
+		return v;
+	}, function (e) {
+		isRejected = true;
+		isPending = false;
+		throw e;
+	});
+
+	result.isFulfilled = function () {
+		return isFulfilled;
+	};
+	result.isPending = function () {
+		return isPending;
+	};
+	result.isRejected = function () {
+		return isRejected;
+	};
+	return result;
+}
+
 // determines process originating from
 var Process = {
 	// return the type of process as a string
