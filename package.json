@@ -1,6 +1,6 @@
 {
   "name": "ipc-flux",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "author": "Harry Park <harry@harrypark.io>",
   "description": "Flux like state & action management across electron processes (ipc).",
   "license": "MIT",
@@ -10,11 +10,9 @@
     "build": "./node_modules/.bin/babel --presets=es2015,stage-0 src/ --out-dir build/ --source-maps",
     "test:main": "./node_modules/.bin/electron-mocha --require test/index.js test/specs/main.spec.js",
     "test:renderer": "./node_modules/.bin/electron-mocha --require test/index.js --require-main test/main.js --renderer test/specs/renderer.spec.js",
-    "test": "xo && ./node_modules/.bin/electron-mocha --require test/index.js test/specs/main.spec.js && ./node_modules/.bin/electron-mocha --require test/index.js --require-main test/main.js --renderer test/specs/renderer.spec.js",
-    "example": "electron ./example",
+    "test": "./node_modules/.bin/eslint \"**/*.js\" && npm run test:main && npm run test:renderer",
     "pretest": "npm run build",
-    "pretest:renderer": "npm run build",
-    "pretest:main": "npm run build",
+    "example": "electron ./example",
     "preexample": "npm run build"
   },
   "devDependencies": {
@@ -27,10 +25,7 @@
     "chai": "^4.0.2",
     "chai-as-promised": "^7.0.0",
     "electron-mocha": "^4.0.0",
-    "eslint": "^3.19.0",
-    "pre-push": "^0.1.1",
-    "uglify-js": "^3.0.22",
-    "xo": "^0.18.2"
+    "eslint": "^4.5.0"
   },
   "babel": {
     "presets": [
@@ -38,30 +33,7 @@
       "stage-0"
     ]
   },
-  "pre-push": [
-    "build"
-  ],
   "dependencies": {
     "electron": "^1.6.11"
-  },
-  "xo": {
-    "parser": "babel-eslint",
-    "ignores": ["build/*", "example/*"],
-    "rules": {
-      "capitalized-comments": 0,
-      "eol-last": 0,
-      "no-trailing-spaces": 0,
-      "no-undef": 0,
-      "no-unused-vars": 0,
-      "no-unused-expressions": 0,
-      "arrow-parens": 0,
-      "no-empty-pattern": 0,
-      "comma-dangle": 0,
-      "object-curly-spacing": 0,
-      "func-name-matching": 0,
-      "func-names": 0,
-      "spaced-comment": 0,
-      "no-use-before-define": 0
-    }
   }
 }

@@ -1,0 +1,26 @@
+{
+	"parserOptions": {
+		"ecmaVersion": 6,
+		"sourceType": "module"
+	},
+	"env": {
+		"es6": true,
+		"node": true
+	},
+	"rules": {
+		"capitalized-comments": 0,
+		"eol-last": 0,
+		"no-trailing-spaces": 0,
+		"no-undef": 0,
+		"no-unused-vars": 0,
+		"no-unused-expressions": 0,
+		"arrow-parens": 0,
+		"no-empty-pattern": 0,
+		"comma-dangle": 0,
+		"object-curly-spacing": 0,
+		"func-name-matching": 0,
+		"func-names": 0,
+		"spaced-comment": 0,
+		"no-use-before-define": 0
+	}
+}

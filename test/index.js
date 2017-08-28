@@ -9,7 +9,7 @@ const chaiAsPromised = require('chai-as-promised');
 
 chai.use(chaiAsPromised);
 
-const { expect, should, assert } = chai;
+const {expect, should, assert} = chai;
 
 global.expect = expect;
 global.should = should();

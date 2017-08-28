@@ -100,12 +100,12 @@ class IpcFlux {
 			}
 
 			switch (arg.callType) {
-				// if the call type is an action, let `actionEmitHandler` handle it
-				case 'action':
-					actionEmitHandler(event, arg);
-					break;
-				default:
-					break;
+			// if the call type is an action, let `actionEmitHandler` handle it
+			case 'action':
+				actionEmitHandler(event, arg);
+				break;
+			default:
+				break;
 			}
 		};
 
@@ -120,20 +120,20 @@ class IpcFlux {
 		emitter.on(channels.error, (event, err) => {
 			if (typeof err === 'object') {
 				switch (err.type) {
-					case 'throw':
-						throw new Error(err.message);
-					case 'warn':
-						console.warn(err.message);
-						break;
-					case 'warning':
-						console.warn(err.message);
-						break;
-					case 'log':
-						console.log(err.message);
-						break;
-					default:
-						console.error(err.message);
-						break;
+				case 'throw':
+					throw new Error(err.message);
+				case 'warn':
+					console.warn(err.message);
+					break;
+				case 'warning':
+					console.warn(err.message);
+					break;
+				case 'log':
+					console.log(err.message);
+					break;
+				default:
+					console.error(err.message);
+					break;
 				}
 			} else {
 				console.error(err);
