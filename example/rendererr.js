@@ -2,7 +2,7 @@ const IpcFlux = require('../build/index.js').default;
 
 const ipcFlux = new IpcFlux({
 	actions: {
-		action1: ({ dispatchExternal }) => {
+		action1: ({dispatchExternal}) => {
 			dispatchExternal('action2');
 		},
 		action2: () => {
@@ -12,8 +12,8 @@ const ipcFlux = new IpcFlux({
 			}, 100);
 		}
 	}
-})
+});
 
-document.getElementById('click').addEventListener('click', (e) => {
+document.getElementById('click').addEventListener('click', () => {
 	ipcFlux.dispatch('action1');
 });

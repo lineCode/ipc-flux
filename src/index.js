@@ -16,10 +16,11 @@
 //
 //
 
-import { ipcMain, ipcRenderer, webContents, BrowserWindow, remote } from 'electron';
+import {ipcMain, ipcRenderer, webContents, remote} from 'electron';
 
 import utils from './utils';
-const { Process, assert, isPromise } = utils;
+
+const {Process, assert, isPromise} = utils;
 
 // predefined channels
 const channels = {
@@ -28,17 +29,14 @@ const channels = {
 	error: 'IpcFlux-Error'
 };
 
-
-// remove all active IpcFlux listeners for the current process
+// remove all existing IpcFlux listeners
 const rmListeners = () => {
 	const emitter = Process.is('main') ? ipcMain : ipcRenderer;
 
-	Object.values(channels).forEach((channel) => {
-		typeof channel === 'object' ? Object.values(channel).forEach((subchannel) => {
-			emitter.removeAllListeners(subchannel);
-		}) : emitter.removeAllListeners(channel);
+	Object.values(channels).forEach(channel => {
+		emitter.removeAllListeners(channel);
 	});
-}
+};
 
 class IpcFlux {
 	constructor(options = {}) {
@@ -51,7 +49,7 @@ class IpcFlux {
 		// remove IpcFlux listeners
 		rmListeners();
 
-		const { actions={}, config={} } = options;
+		const {actions = {}, config = {}} = options;
 
 		// defined due to `this` being reassigned in arrow functions
 		const instance = this;
@@ -63,18 +61,18 @@ class IpcFlux {
 			maxListeners: 50,
 			debug: false,
 			...config
-		}
+		};
 
 		// the listener to be called for actions
 		const actionEmitHandler = (event, arg) => {
 			if (instance.actionExists(arg.action)) {
 				const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
 
-				const act = dispatch.call(instance, { ...arg, target }, arg.action, arg.payload);
+				const act = dispatch.call(instance, {...arg, target}, arg.action, arg.payload);
 
 				if (isPromise(act)) {
 					// on Promise complete, send a callback to the dispatcher
-					act.then((data) => {
+					act.then(data => {
 						event.sender.send(channels.callback, {
 							...arg,
 							target,
@@ -93,7 +91,7 @@ class IpcFlux {
 				// if the action doesn't exist, send an error message back to the caller
 				event.sender.send(channels.error, `[IpcFlux] unknown action called from ${arg.process} process, in ${Process.type()} process: ${arg.action}`);
 			}
-		}
+		};
 
 		// run on `channel.call`
 		const emitterCallListener = (event, arg) => {
@@ -101,13 +99,15 @@ class IpcFlux {
 				return;
 			}
 
-			switch(arg.callType) {
+			switch (arg.callType) {
 				// if the call type is an action, let `actionEmitHandler` handle it
 				case 'action':
 					actionEmitHandler(event, arg);
 					break;
+				default:
+					break;
 			}
-		}
+		};
 
 		// define the process emitter, minimizes code duplication
 		const emitter = Process.is('main') ? ipcMain : ipcRenderer;
@@ -116,12 +116,12 @@ class IpcFlux {
 
 		// the emitter event handlers for calls and errors
 		emitter.on(channels.call, emitterCallListener);
+
 		emitter.on(channels.error, (event, err) => {
 			if (typeof err === 'object') {
-				switch(err.type) {
+				switch (err.type) {
 					case 'throw':
 						throw new Error(err.message);
-						break;
 					case 'warn':
 						console.warn(err.message);
 						break;
@@ -140,14 +140,14 @@ class IpcFlux {
 			}
 		});
 
-		const { dispatch, dispatchExternal } = this;
+		const {dispatch, dispatchExternal} = this;
 
 		this.dispatch = (type, payload) => {
 			return dispatch.call(instance, {
 				process: Process.type(),
 				target: Process.is('renderer') ? remote.getCurrentWindow().id : 0
 			}, type, payload);
-		}
+		};
 
 		this.dispatchExternal = (target, action, payload) => {
 			// return a promise of the dispatch, resolving on callback
@@ -162,31 +162,30 @@ class IpcFlux {
 					} else {
 						reject();
 					}
-
-				}
+				};
 
 				// setup a callback listener
 				emitter.on(channels.callback, listener);
 			});
-		}
+		};
 
 		// register all actions defined in the class constructor options
-		Object.keys(actions).forEach((action) => {
+		Object.keys(actions).forEach(action => {
 			this.registerAction(action, actions[action]);
 		});
 
 		this.debug = {
 			process: Process.type(),
 			channels
-		}
+		};
 	}
 
 	actionExists(action) {
-		return !!this._actions[action];
+		return Boolean(this._actions[action]);
 	}
 
 	dispatch(_caller, _action, _payload) {
-		const { action, payload } = {
+		const {action, payload} = {
 			action: _action,
 			payload: _payload
 		};
@@ -209,20 +208,20 @@ class IpcFlux {
 
 	dispatchExternal(_target, _action, _payload) {
 		// same for both process types
-		let arg = {
+		const arg = {
 			process: Process.type(),
 			callType: 'action'
 		};
 
-		let { target, action, payload } = {
+		let {target, action, payload} = {
 			target: _target,
 			action: _action,
 			payload: _payload
-		}
+		};
 
 		if (Process.is('main')) {
 			// checks target is an instance of BrowserWindow, or if is a BrowserWindow id
-			if (typeof target === 'object' || typeof target === 'number') {} else {
+			if (typeof target !== 'object' && typeof target !== 'number') {
 				console.error('[IpcFlux] target passed is not instanceof BrowserWindow or an active BrowserWindow\'s id');
 				return;
 			}
@@ -230,7 +229,7 @@ class IpcFlux {
 			// converts BrowserWindow or BrowserWindow id to webContents for instance checking
 			target = typeof target === 'number' ? webContents.fromId(target) : target.webContents;
 
-			if(!target.webContents) {
+			if (!target.webContents) {
 				console.error('[IpcFlux] target passed is not an instanceof BrowserWindow or an active BrowserWindow\'s id');
 				return;
 			}
@@ -259,7 +258,7 @@ class IpcFlux {
 				action: target,
 				payload: action,
 				// send the current BrowserWindow id for callback and error handling
-				target: remote.getCurrentWindow().id,
+				target: remote.getCurrentWindow().id
 			});
 		}
 	}
@@ -289,4 +288,4 @@ class IpcFlux {
 	}
 }
 
-export default IpcFlux
+export default IpcFlux;

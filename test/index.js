@@ -5,7 +5,7 @@ require('babel-register')({
 
 // allow chai api's globally
 const chai = require('chai');
-const chaiAsPromised = require("chai-as-promised");
+const chaiAsPromised = require('chai-as-promised');
 
 chai.use(chaiAsPromised);
 

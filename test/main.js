@@ -1,6 +1,7 @@
 const rendererWindowId = 1;
 
 const IpcFlux = require('../build/index.js').default;
+
 const ipcFlux = new IpcFlux({
 	actions: {
 		action1: () => {

@@ -4,11 +4,11 @@ Object.defineProperty(exports, "__esModule", {
 	value: true
 });
 
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
 var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; //
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }(); //
 //     _                  _____
 //    (_)__  ____  ____  / _/ /_ ____ __
 //   / / _ \/ __/ /___/ / _/ / // /\ \ /
@@ -48,14 +48,12 @@ var channels = {
 	error: 'IpcFlux-Error'
 };
 
-// remove all active IpcFlux listeners for the current process
+// remove all existing IpcFlux listeners
 var rmListeners = function rmListeners() {
 	var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
 
 	Object.values(channels).forEach(function (channel) {
-		(typeof channel === 'undefined' ? 'undefined' : _typeof(channel)) === 'object' ? Object.values(channel).forEach(function (subchannel) {
-			emitter.removeAllListeners(subchannel);
-		}) : emitter.removeAllListeners(channel);
+		emitter.removeAllListeners(channel);
 	});
 };
 
@@ -132,6 +130,8 @@ var IpcFlux = function () {
 				case 'action':
 					actionEmitHandler(event, arg);
 					break;
+				default:
+					break;
 			}
 		};
 
@@ -142,12 +142,12 @@ var IpcFlux = function () {
 
 		// the emitter event handlers for calls and errors
 		emitter.on(channels.call, emitterCallListener);
+
 		emitter.on(channels.error, function (event, err) {
 			if ((typeof err === 'undefined' ? 'undefined' : _typeof(err)) === 'object') {
 				switch (err.type) {
 					case 'throw':
 						throw new Error(err.message);
-						break;
 					case 'warn':
 						console.warn(err.message);
 						break;
@@ -211,7 +211,7 @@ var IpcFlux = function () {
 	_createClass(IpcFlux, [{
 		key: 'actionExists',
 		value: function actionExists(action) {
-			return !!this._actions[action];
+			return Boolean(this._actions[action]);
 		}
 	}, {
 		key: 'dispatch',
@@ -262,7 +262,7 @@ var IpcFlux = function () {
 
 			if (Process.is('main')) {
 				// checks target is an instance of BrowserWindow, or if is a BrowserWindow id
-				if ((typeof target === 'undefined' ? 'undefined' : _typeof(target)) === 'object' || typeof target === 'number') {} else {
+				if ((typeof target === 'undefined' ? 'undefined' : _typeof(target)) !== 'object' && typeof target !== 'number') {
 					console.error('[IpcFlux] target passed is not instanceof BrowserWindow or an active BrowserWindow\'s id');
 					return;
 				}

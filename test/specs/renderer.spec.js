@@ -39,7 +39,7 @@ describe('Renderer', () => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }) => {
-							return dispatch('action2')
+							return dispatch('action2');
 						},
 						action2: () => {
 							return 'action2';
