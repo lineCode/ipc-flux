@@ -130,22 +130,69 @@ ipcFlux.dispatch('action2').then((data) => {
 ```
 
 ### `<webview>`
+#### html file
 
 ```html
 <!-- `nodeintegration` MUST be specified to expose the node api used by ipc-flux -->
-<webview id="webview" src="..." nodeintegration></webview>
+<webview src="..." nodeintegration></webview>
+```
+
+###### *webview html src*
+
+```html
 <script>
-	const webview = document.getElementById('webview');
-
-	webview.addEventListener('dom-ready', function() {
-		webview.openDevTools();
-
-		webview.getWebContents().id;
-	});
+	require('./renderer.js');
 </script>
 ```
 
-> then, setup `ipc-flux` as a renderer process in the webview src
+###### *`renderer.js` src*
+
+```js
+import IpcFlux from 'ipc-flux';
+
+const ipcFlux = new IpcFlux({
+	actions: {
+		action1: ({dispatchExternal}) => {
+			dispatchExternal('action3');
+		},
+		action2: () => {
+			console.log('action2');
+		}
+	}
+});
+
+setTimeout(() => {
+	ipcFlux.dispatch('action1');
+}, 500);
+```
+
+#### preload
+
+```html
+<!-- src can be *any* url -->
+<webview src="..." preload="./renderer.js"></webview>
+```
+
+###### *`renderer.js` src*
+
+```js
+import IpcFlux from 'ipc-flux';
+
+const ipcFlux = new IpcFlux({
+	actions: {
+		action1: ({dispatchExternal}) => {
+			dispatchExternal('action3');
+		},
+		action2: () => {
+			console.log('action2');
+		}
+	}
+});
+
+setTimeout(() => {
+	ipcFlux.dispatch('action1');
+}, 500);
+```
 
 ### Info
 #### Used Ipc Channels

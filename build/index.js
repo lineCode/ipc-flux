@@ -67,8 +67,7 @@ var IpcFlux = function () {
 
 		if (Process.env.type() !== 'production') {
 			// check if Promises can be used
-			assert(typeof Promise !== 'undefined', '[IpcFlux] requires Promises to function.');
-			assert(this instanceof IpcFlux, '[IpcFlux] must be called with the new operator.');
+			assert(typeof Promise === 'undefined', '[IpcFlux] requires Promises to function.');
 		}
 
 		// remove IpcFlux listeners
@@ -77,10 +76,14 @@ var IpcFlux = function () {
 		var _options$actions = options.actions,
 		    actions = _options$actions === undefined ? {} : _options$actions,
 		    _options$config = options.config,
-		    config = _options$config === undefined ? {} : _options$config;
+		    config = _options$config === undefined ? {} : _options$config,
+		    _options$state = options.state,
+		    state = _options$state === undefined ? {} : _options$state;
+
+
+		assert(Object.keys(state).length > 0 && Process.is('renderer'), '[IpcFlux] state must be declared in main process');
 
 		// defined due to `this` being reassigned in arrow functions (grr)
-
 		var instance = this;
 
 		this._actions = Object.create(null);

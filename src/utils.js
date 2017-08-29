@@ -3,7 +3,7 @@ const isPromise = val => {
 };
 
 const assert = (condition, msg) => {
-	if (!condition) {
+	if (condition) {
 		throw new Error(`[IpcFlux] ${msg}`);
 	}
 };

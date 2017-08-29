@@ -11,7 +11,7 @@ var isPromise = function isPromise(val) {
 };
 
 var assert = function assert(condition, msg) {
-	if (!condition) {
+	if (condition) {
 		throw new Error('[IpcFlux] ' + msg);
 	}
 };
