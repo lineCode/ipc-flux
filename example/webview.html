@@ -11,10 +11,6 @@
 	</body>
 
 	<script>
-		const {ipcRenderer} = require('electron');
-
-		ipcRenderer.on('IpcFlux-Error', () => {
-			console.log('hello');
-		});
+		require('./renderer-webview.js');
 	</script>
 </html>

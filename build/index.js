@@ -79,7 +79,7 @@ var IpcFlux = function () {
 		    _options$config = options.config,
 		    config = _options$config === undefined ? {} : _options$config;
 
-		// defined due to `this` being reassigned in arrow functions
+		// defined due to `this` being reassigned in arrow functions (grr)
 
 		var instance = this;
 
@@ -236,7 +236,7 @@ var IpcFlux = function () {
 				return;
 			}
 
-			// return a promise of the action function, async
+			// return a promise of the action function
 			return entry.length > 1 ? Promise.all(entry.map(function (handler) {
 				return handler(payload);
 			})) : entry[0](payload);

@@ -16,11 +16,11 @@
 //
 //
 
-import {ipcMain, ipcRenderer, webContents, remote} from 'electron';
+import { ipcMain, ipcRenderer, webContents, remote } from 'electron';
 
 import utils from './utils';
 
-const {Process, assert, isPromise} = utils;
+const { Process, assert, isPromise } = utils;
 
 // predefined channels
 const channels = {
@@ -49,9 +49,9 @@ class IpcFlux {
 		// remove IpcFlux listeners
 		rmListeners();
 
-		const {actions = {}, config = {}} = options;
+		const { actions = {}, config = {} } = options;
 
-		// defined due to `this` being reassigned in arrow functions
+		// defined due to `this` being reassigned in arrow functions (grr)
 		const instance = this;
 
 		this._actions = Object.create(null);
@@ -68,7 +68,7 @@ class IpcFlux {
 			if (instance.actionExists(arg.action)) {
 				const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
 
-				const act = dispatch.call(instance, {...arg, target}, arg.action, arg.payload);
+				const act = dispatch.call(instance, { ...arg, target }, arg.action, arg.payload);
 
 				if (isPromise(act)) {
 					// on Promise complete, send a callback to the dispatcher
@@ -140,7 +140,7 @@ class IpcFlux {
 			}
 		});
 
-		const {dispatch, dispatchExternal} = this;
+		const { dispatch, dispatchExternal } = this;
 
 		this.dispatch = (type, payload) => {
 			return dispatch.call(instance, {
@@ -185,7 +185,7 @@ class IpcFlux {
 	}
 
 	dispatch(_caller, _action, _payload) {
-		const {action, payload} = {
+		const { action, payload } = {
 			action: _action,
 			payload: _payload
 		};
@@ -202,7 +202,7 @@ class IpcFlux {
 			return;
 		}
 
-		// return a promise of the action function, async
+		// return a promise of the action function
 		return entry.length > 1 ? Promise.all(entry.map(handler => handler(payload))) : entry[0](payload);
 	}
 
@@ -213,7 +213,7 @@ class IpcFlux {
 			callType: 'action'
 		};
 
-		let {target, action, payload} = {
+		let { target, action, payload } = {
 			target: _target,
 			action: _action,
 			payload: _payload

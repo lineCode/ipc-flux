@@ -1,16 +1,17 @@
 {
   "name": "ipc-flux",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "author": "Harry Park <harry@harrypark.io>",
   "description": "Flux like state & action management across electron processes (ipc).",
   "license": "MIT",
   "repository": "https://github.com/harryparkdotio/ipc-flux.git",
   "main": "build/index.js",
   "scripts": {
+  	"lint": "./node_modules/.bin/eslint \"**/*.js\"",
     "build": "./node_modules/.bin/babel --presets=es2015,stage-0 src/ --out-dir build/ --source-maps",
     "test:main": "./node_modules/.bin/electron-mocha --require test/index.js test/specs/main.spec.js",
     "test:renderer": "./node_modules/.bin/electron-mocha --require test/index.js --require-main test/main.js --renderer test/specs/renderer.spec.js",
-    "test": "./node_modules/.bin/eslint \"**/*.js\" && npm run test:main && npm run test:renderer",
+    "test": "npm run lint && npm run test:main && npm run test:renderer",
     "pretest": "npm run build",
     "example": "electron ./example",
     "preexample": "npm run build"
@@ -25,7 +26,8 @@
     "chai": "^4.0.2",
     "chai-as-promised": "^7.0.0",
     "electron-mocha": "^4.0.0",
-    "eslint": "^4.5.0"
+    "eslint": "^4.5.0",
+    "eslint-plugin-html": "^3.2.0"
   },
   "babel": {
     "presets": [

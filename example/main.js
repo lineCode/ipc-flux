@@ -16,6 +16,9 @@ const ipcFlux = new IpcFlux({
 		},
 		action2: ({ dispatchExternal }) => {
 			dispatchExternal(1, 'action2');
+		},
+		action3: ({ dispatchExternal }) => {
+			dispatchExternal(3, 'action2');
 		}
 	}
 });
@@ -29,12 +32,12 @@ function createWindow (d) {
 		y: 50
 	});
 
-	d === 0 ? mainWindows[d].loadURL(`file://${__dirname}/index.html`) : mainWindows[d].loadURL(`file://${__dirname}/indexx.html`);
+	d === 0 ? mainWindows[d].loadURL(`file://${__dirname}/index.html`) : mainWindows[d].loadURL(`file://${__dirname}/index-2.html`);
 
 	// mainWindows[d].webContents.openDevTools()
 
 	mainWindows[d].on('closed', function () {
-		mainWindows[d] = null
+		mainWindows[d] = null;
 	});
 }
 

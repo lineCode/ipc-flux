@@ -129,6 +129,24 @@ ipcFlux.dispatch('action2').then((data) => {
 });
 ```
 
+### `<webview>`
+
+```html
+<!-- `nodeintegration` MUST be specified to expose the node api used by ipc-flux -->
+<webview id="webview" src="..." nodeintegration></webview>
+<script>
+	const webview = document.getElementById('webview');
+
+	webview.addEventListener('dom-ready', function() {
+		webview.openDevTools();
+
+		webview.getWebContents().id;
+	});
+</script>
+```
+
+> then, setup `ipc-flux` as a renderer process in the webview src
+
 ### Info
 #### Used Ipc Channels
 - `IpcFlux-Call`
