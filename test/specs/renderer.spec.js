@@ -19,6 +19,18 @@ describe('Renderer', () => {
 
 			ipcFlux.dispatch('action1').should.eventually.equal('action1').notify(done);
 		});
+
+		it('setting state throws error', () => {
+			const ipcFlux = () => {
+				new IpcFlux({
+					state: {
+						key: 'value'
+					}
+				});
+			};
+
+			expect(ipcFlux).to.throw(Error);
+		});
 	});
 
 	describe('dispatch', () => {

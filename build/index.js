@@ -4,9 +4,9 @@ Object.defineProperty(exports, "__esModule", {
 	value: true
 });
 
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
-
 var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }(); //
 //     _                  _____
@@ -45,7 +45,8 @@ var Process = _utils2.default.Process,
 var channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
-	error: 'IpcFlux-Error'
+	error: 'IpcFlux-Error',
+	state: 'IpcFlux-State'
 };
 
 // remove all existing IpcFlux listeners
@@ -67,7 +68,7 @@ var IpcFlux = function () {
 
 		if (Process.env.type() !== 'production') {
 			// check if Promises can be used
-			assert(typeof Promise === 'undefined', '[IpcFlux] requires Promises to function.');
+			assert(typeof Promise === 'undefined', 'Promises are required');
 		}
 
 		// remove IpcFlux listeners
@@ -75,18 +76,28 @@ var IpcFlux = function () {
 
 		var _options$actions = options.actions,
 		    actions = _options$actions === undefined ? {} : _options$actions,
+		    _options$mutations = options.mutations,
+		    mutations = _options$mutations === undefined ? {} : _options$mutations,
 		    _options$config = options.config,
-		    config = _options$config === undefined ? {} : _options$config,
-		    _options$state = options.state,
-		    state = _options$state === undefined ? {} : _options$state;
+		    config = _options$config === undefined ? {} : _options$config;
+		var state = options.state;
 
 
-		assert(Object.keys(state).length > 0 && Process.is('renderer'), '[IpcFlux] state must be declared in main process');
+		assert((state !== undefined || (typeof state === 'undefined' ? 'undefined' : _typeof(state)) === 'object' && Object.keys(state).length > 0) && Process.is('renderer'), 'initial state must be declared in main process');
+
+		if (Process.is('main')) {
+			state = state || {};
+		}
 
 		// defined due to `this` being reassigned in arrow functions (grr)
 		var instance = this;
 
+		this._committing = false;
 		this._actions = Object.create(null);
+		this._mutations = Object.create(null);
+		this._getters = Object.create(null);
+		this._subscribers = [];
+
 		this._config = Object.create(null);
 
 		this._config = _extends({
@@ -170,7 +181,8 @@ var IpcFlux = function () {
 		});
 
 		var dispatch = this.dispatch,
-		    dispatchExternal = this.dispatchExternal;
+		    dispatchExternal = this.dispatchExternal,
+		    commit = this.commit;
 
 
 		this.dispatch = function (type, payload) {
@@ -200,9 +212,18 @@ var IpcFlux = function () {
 			});
 		};
 
+		this.commit = function (type, payload, options) {
+			return commit.call(instance, type, payload, options);
+		};
+
 		// register all actions defined in the class constructor options
 		Object.keys(actions).forEach(function (action) {
 			_this.registerAction(action, actions[action]);
+		});
+
+		// register all mutations defined in the class constructor options
+		Object.keys(mutations).forEach(function (mutation) {
+			_this.registerMutation(mutation, mutations[mutation]);
 		});
 
 		this.debug = {
@@ -305,6 +326,41 @@ var IpcFlux = function () {
 			}
 		}
 	}, {
+		key: 'commit',
+		value: function commit(_type, _payload, _options) {
+			var _this2 = this;
+
+			var instance = this;
+
+			var _type$payload$options = {
+				type: _type,
+				payload: _payload,
+				options: _options
+			},
+			    type = _type$payload$options.type,
+			    payload = _type$payload$options.payload,
+			    options = _type$payload$options.options;
+
+
+			var mutation = { type: type, payload: payload };
+			var entry = this._mutations[type];
+
+			if (!entry) {
+				console.error('[IpcFlux] unknown mutation type: ' + type);
+				return;
+			}
+
+			instance._withCommit(function () {
+				entry.forEach(function (handler) {
+					handler(payload);
+				});
+			});
+
+			this._subscribers.forEach(function (sub) {
+				return sub(mutation, _this2.state);
+			});
+		}
+	}, {
 		key: 'registerAction',
 		value: function registerAction(action, handler) {
 			var instance = this;
@@ -328,6 +384,24 @@ var IpcFlux = function () {
 
 				return res;
 			});
+		}
+	}, {
+		key: 'registerMutation',
+		value: function registerMutation(mutation, handler) {
+			var instance = this;
+
+			var entry = instance._mutations[mutation] || (instance._mutations[mutation] = []);
+			entry.push(function (payload) {
+				handler.call(instance, instance.state, payload);
+			});
+		}
+	}, {
+		key: '_withCommit',
+		value: function _withCommit(fn) {
+			var committing = this._committing;
+			this._committing = true;
+			fn();
+			this._committing = committing;
 		}
 	}]);
 

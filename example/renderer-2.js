@@ -11,9 +11,15 @@ const ipcFlux = new IpcFlux({
 				document.getElementById('click').style.backgroundColor = 'blue';
 			}, 100);
 		}
+	},
+	mutations: {
+		mutation1: () => {
+			console.log('hi');
+		}
 	}
 });
 
 document.getElementById('click').addEventListener('click', () => {
 	ipcFlux.dispatch('action1');
+	ipcFlux.commit('mutation1');
 });

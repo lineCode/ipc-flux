@@ -26,7 +26,8 @@ const { Process, assert, isPromise } = utils;
 const channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
-	error: 'IpcFlux-Error'
+	error: 'IpcFlux-Error',
+	state: 'IpcFlux-State'
 };
 
 // remove all existing IpcFlux listeners
@@ -42,20 +43,31 @@ class IpcFlux {
 	constructor(options = {}) {
 		if (Process.env.type() !== 'production') {
 			// check if Promises can be used
-			assert(typeof Promise === 'undefined', '[IpcFlux] requires Promises to function.');
+			assert(typeof Promise === 'undefined', 'Promises are required');
 		}
 
 		// remove IpcFlux listeners
 		rmListeners();
 
-		const { actions = {}, config = {}, state = {} } = options;
+		const { actions = {}, mutations = {}, config = {} } = options;
 
-		assert(Object.keys(state).length > 0 && Process.is('renderer'), '[IpcFlux] state must be declared in main process');
+		let { state } = options;
+
+		assert((state !== undefined || (typeof state === 'object' && Object.keys(state).length > 0)) && Process.is('renderer'), 'initial state must be declared in main process');
+
+		if (Process.is('main')) {
+			state = state || {};
+		}
 
 		// defined due to `this` being reassigned in arrow functions (grr)
 		const instance = this;
 
+		this._committing = false;
 		this._actions = Object.create(null);
+		this._mutations = Object.create(null);
+		this._getters = Object.create(null);
+		this._subscribers = [];
+
 		this._config = Object.create(null);
 
 		this._config = {
@@ -141,7 +153,7 @@ class IpcFlux {
 			}
 		});
 
-		const { dispatch, dispatchExternal } = this;
+		const { dispatch, dispatchExternal, commit } = this;
 
 		this.dispatch = (type, payload) => {
 			return dispatch.call(instance, {
@@ -170,9 +182,18 @@ class IpcFlux {
 			});
 		};
 
+		this.commit = (type, payload, options) => {
+			return commit.call(instance, type, payload, options);
+		};
+
 		// register all actions defined in the class constructor options
 		Object.keys(actions).forEach(action => {
 			this.registerAction(action, actions[action]);
+		});
+
+		// register all mutations defined in the class constructor options
+		Object.keys(mutations).forEach(mutation => {
+			this.registerMutation(mutation, mutations[mutation]);
 		});
 
 		this.debug = {
@@ -264,6 +285,32 @@ class IpcFlux {
 		}
 	}
 
+	commit(_type, _payload, _options) {
+		const instance = this;
+
+		let { type, payload, options } = {
+			type: _type,
+			payload: _payload,
+			options: _options
+		};
+
+		const mutation = { type, payload };
+		const entry = this._mutations[type];
+
+		if (!entry) {
+			console.error(`[IpcFlux] unknown mutation type: ${type}`);
+			return;
+		}
+
+		instance._withCommit(() => {
+			entry.forEach(handler => {
+				handler(payload);
+			});
+		});
+
+		this._subscribers.forEach(sub => sub(mutation, this.state));
+	}
+
 	registerAction(action, handler) {
 		const instance = this;
 
@@ -286,6 +333,22 @@ class IpcFlux {
 
 			return res;
 		});
+	}
+
+	registerMutation(mutation, handler) {
+		const instance = this;
+
+		const entry = instance._mutations[mutation] || (instance._mutations[mutation] = []);
+		entry.push((payload) => {
+			handler.call(instance, instance.state, payload);
+		});
+	}
+
+	_withCommit(fn) {
+		const committing = this._committing;
+		this._committing = true;
+		fn();
+		this._committing = committing;
 	}
 }
 
