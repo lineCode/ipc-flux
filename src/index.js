@@ -106,6 +106,24 @@ class IpcFlux {
 			}
 		};
 
+		const commitEmitHandler = (event, arg) => {
+			if (instance.mutationExists(arg.mutation)) {
+				const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
+
+				const act = commit.call(instance, { ...arg, target }, arg.mutation, arg.payload);
+
+				if (isPromise(act)) {
+					act.then(data => {
+						event.sender.send(channels.callback, {
+							...arg,
+							target,
+							data
+						});
+					});
+				}
+			}
+		};
+
 		// run on `channel.call`
 		const emitterCallListener = (event, arg) => {
 			if (typeof arg !== 'object') {
@@ -116,6 +134,9 @@ class IpcFlux {
 			// if the call type is an action, let `actionEmitHandler` handle it
 			case 'action':
 				actionEmitHandler(event, arg);
+				break;
+			case 'mutation':
+				commitEmitHandler(event, arg);
 				break;
 			default:
 				break;
@@ -204,6 +225,10 @@ class IpcFlux {
 
 	actionExists(action) {
 		return Boolean(this._actions[action]);
+	}
+
+	mutationExists(mutation) {
+		return Boolean(this._mutations[mutation]);
 	}
 
 	dispatch(_caller, _action, _payload) {
@@ -309,6 +334,28 @@ class IpcFlux {
 		});
 
 		this._subscribers.forEach(sub => sub(mutation, this.state));
+	}
+
+	commitExternal(_target, _type, _payload, _options) {
+		const instance = this;
+
+		const arg = {
+			process: Process.type(),
+			callType: 'commit'
+		};
+
+		let { target, type, payload, options } = {
+			target: _target,
+			type: _type,
+			payload: _payload,
+			options: _options
+		};
+
+		// if (Process.is('main')) {
+
+		// } else if (Process.is('renderer')) {
+
+		// }
 	}
 
 	registerAction(action, handler) {

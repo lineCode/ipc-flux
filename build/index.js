@@ -133,6 +133,23 @@ var IpcFlux = function () {
 			}
 		};
 
+		var commitEmitHandler = function commitEmitHandler(event, arg) {
+			if (instance.mutationExists(arg.mutation)) {
+				var target = Process.is('renderer') ? _electron.remote.getCurrentWindow().id : arg.target;
+
+				var act = commit.call(instance, _extends({}, arg, { target: target }), arg.mutation, arg.payload);
+
+				if (isPromise(act)) {
+					act.then(function (data) {
+						event.sender.send(channels.callback, _extends({}, arg, {
+							target: target,
+							data: data
+						}));
+					});
+				}
+			}
+		};
+
 		// run on `channel.call`
 		var emitterCallListener = function emitterCallListener(event, arg) {
 			if ((typeof arg === 'undefined' ? 'undefined' : _typeof(arg)) !== 'object') {
@@ -143,6 +160,9 @@ var IpcFlux = function () {
 				// if the call type is an action, let `actionEmitHandler` handle it
 				case 'action':
 					actionEmitHandler(event, arg);
+					break;
+				case 'mutation':
+					commitEmitHandler(event, arg);
 					break;
 				default:
 					break;
@@ -236,6 +256,11 @@ var IpcFlux = function () {
 		key: 'actionExists',
 		value: function actionExists(action) {
 			return Boolean(this._actions[action]);
+		}
+	}, {
+		key: 'mutationExists',
+		value: function mutationExists(mutation) {
+			return Boolean(this._mutations[mutation]);
 		}
 	}, {
 		key: 'dispatch',
@@ -359,6 +384,33 @@ var IpcFlux = function () {
 			this._subscribers.forEach(function (sub) {
 				return sub(mutation, _this2.state);
 			});
+		}
+	}, {
+		key: 'commitExternal',
+		value: function commitExternal(_target, _type, _payload, _options) {
+			var instance = this;
+
+			var arg = {
+				process: Process.type(),
+				callType: 'commit'
+			};
+
+			var _target$type$payload$ = {
+				target: _target,
+				type: _type,
+				payload: _payload,
+				options: _options
+			},
+			    target = _target$type$payload$.target,
+			    type = _target$type$payload$.type,
+			    payload = _target$type$payload$.payload,
+			    options = _target$type$payload$.options;
+
+			// if (Process.is('main')) {
+
+			// } else if (Process.is('renderer')) {
+
+			// }
 		}
 	}, {
 		key: 'registerAction',
