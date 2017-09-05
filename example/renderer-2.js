@@ -21,5 +21,6 @@ const ipcFlux = new IpcFlux({
 
 document.getElementById('click').addEventListener('click', () => {
 	ipcFlux.dispatch('action1');
+	ipcFlux.commitExternal('mutation1');
 	ipcFlux.commit('mutation1');
 });

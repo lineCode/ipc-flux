@@ -49,7 +49,7 @@ class IpcFlux {
 		// remove IpcFlux listeners
 		rmListeners();
 
-		const { actions = {}, mutations = {}, config = {} } = options;
+		const { actions = {}, mutations = {}, getters = {}, config = {} } = options;
 
 		let { state } = options;
 
@@ -106,21 +106,11 @@ class IpcFlux {
 			}
 		};
 
-		const commitEmitHandler = (event, arg) => {
+		const mutationEmitHandler = (event, arg) => {
 			if (instance.mutationExists(arg.mutation)) {
 				const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
 
-				const act = commit.call(instance, { ...arg, target }, arg.mutation, arg.payload);
-
-				if (isPromise(act)) {
-					act.then(data => {
-						event.sender.send(channels.callback, {
-							...arg,
-							target,
-							data
-						});
-					});
-				}
+				commit.call(instance, { ...arg, target }, arg.mutation, arg.payload);
 			}
 		};
 
@@ -136,7 +126,7 @@ class IpcFlux {
 				actionEmitHandler(event, arg);
 				break;
 			case 'mutation':
-				commitEmitHandler(event, arg);
+				mutationEmitHandler(event, arg);
 				break;
 			default:
 				break;
@@ -174,7 +164,7 @@ class IpcFlux {
 			}
 		});
 
-		const { dispatch, dispatchExternal, commit } = this;
+		const { dispatch, dispatchExternal, commit, commitExternal } = this;
 
 		this.dispatch = (type, payload) => {
 			return dispatch.call(instance, {
@@ -203,8 +193,13 @@ class IpcFlux {
 			});
 		};
 
-		this.commit = (type, payload, options) => {
-			return commit.call(instance, type, payload, options);
+		this.commit = (mutation, payload, options) => {
+			commit.call(instance, mutation, payload, options);
+		};
+
+		this.commitExternal = (target, mutation, payload, options) => {
+			// return a promise of the dispatch, resolving on callback
+			commitExternal.call(instance, target, mutation, payload, options);
 		};
 
 		// register all actions defined in the class constructor options
@@ -215,6 +210,11 @@ class IpcFlux {
 		// register all mutations defined in the class constructor options
 		Object.keys(mutations).forEach(mutation => {
 			this.registerMutation(mutation, mutations[mutation]);
+		});
+
+		// register all getters defined in the class constructor options
+		Object.keys(getters).forEach(getter => {
+			this.registerGetter(getter, getters[getter]);
 		});
 
 		this.debug = {
@@ -336,26 +336,63 @@ class IpcFlux {
 		this._subscribers.forEach(sub => sub(mutation, this.state));
 	}
 
-	commitExternal(_target, _type, _payload, _options) {
+	commitExternal(_target, _mutation, _payload, _options) {
 		const instance = this;
 
 		const arg = {
 			process: Process.type(),
-			callType: 'commit'
+			callType: 'mutation'
 		};
 
-		let { target, type, payload, options } = {
+		let { target, mutation, payload, options } = {
 			target: _target,
-			type: _type,
+			mutation: _mutation,
 			payload: _payload,
 			options: _options
 		};
 
-		// if (Process.is('main')) {
+		if (Process.is('main')) {
+			if (typeof target !== 'object' && typeof target !== 'number') {
+				console.error('[IpcFlux] target passed is not instanceof BrowserWindow or an active BrowserWindow\'s id');
+				return;
+			}
 
-		// } else if (Process.is('renderer')) {
+			target = typeof target === 'number' ? webContents.fromId(target) : target.webContents;
 
-		// }
+			if (!target.webContents) {
+				console.error('[IpcFlux] target passed is not an instanceof BrowserWindow or an active BrowserWindow\'s id');
+				return;
+			}
+
+			if (typeof mutation !== 'string') {
+				console.error('[IpcFlux] mutation not passed as parameter');
+				return;
+			}
+
+			webContents.fromId(target.webContents.id).send(channels.call, {
+				...arg,
+				mutation,
+				payload,
+				options,
+				// send the target BrowserWindow id for callback and error handling
+				target: target.webContents.id
+			});
+		} else if (Process.is('renderer')) {
+			if (typeof target !== 'string') {
+				console.error('[IpcFlux] mutation not passed as parameter');
+				return;
+			}
+
+			// send a call to the main process to dispatch the action
+			ipcRenderer.send(channels.call, {
+				...arg,
+				mutation: target,
+				payload: mutation,
+				options: payload,
+				// send the current BrowserWindow id for callback and error handling
+				target: remote.getCurrentWindow().id
+			});
+		}
 	}
 
 	registerAction(action, handler) {
@@ -385,10 +422,23 @@ class IpcFlux {
 	registerMutation(mutation, handler) {
 		const instance = this;
 
-		const entry = instance._mutations[mutation] || (instance._mutations[mutation] = []);
+		const entry = Array.isArray(instance._mutations[mutation]) ? instance._mutations[mutation] : instance._mutations[mutation] = [];
 		entry.push((payload) => {
 			handler.call(instance, instance.state, payload);
 		});
+	}
+
+	registerGetter(getter, raw) {
+		const instance = this;
+
+		if (this._getters[getter]) {
+			console.log('[IpcFlux] duplicate getter key');
+			return;
+		}
+
+		this._getters[getter] = () => {
+			return raw(instance.state, instance.getters);
+		};
 	}
 
 	_withCommit(fn) {

@@ -78,6 +78,8 @@ var IpcFlux = function () {
 		    actions = _options$actions === undefined ? {} : _options$actions,
 		    _options$mutations = options.mutations,
 		    mutations = _options$mutations === undefined ? {} : _options$mutations,
+		    _options$getters = options.getters,
+		    getters = _options$getters === undefined ? {} : _options$getters,
 		    _options$config = options.config,
 		    config = _options$config === undefined ? {} : _options$config;
 		var state = options.state;
@@ -133,20 +135,11 @@ var IpcFlux = function () {
 			}
 		};
 
-		var commitEmitHandler = function commitEmitHandler(event, arg) {
+		var mutationEmitHandler = function mutationEmitHandler(event, arg) {
 			if (instance.mutationExists(arg.mutation)) {
 				var target = Process.is('renderer') ? _electron.remote.getCurrentWindow().id : arg.target;
 
-				var act = commit.call(instance, _extends({}, arg, { target: target }), arg.mutation, arg.payload);
-
-				if (isPromise(act)) {
-					act.then(function (data) {
-						event.sender.send(channels.callback, _extends({}, arg, {
-							target: target,
-							data: data
-						}));
-					});
-				}
+				commit.call(instance, _extends({}, arg, { target: target }), arg.mutation, arg.payload);
 			}
 		};
 
@@ -162,7 +155,7 @@ var IpcFlux = function () {
 					actionEmitHandler(event, arg);
 					break;
 				case 'mutation':
-					commitEmitHandler(event, arg);
+					mutationEmitHandler(event, arg);
 					break;
 				default:
 					break;
@@ -202,7 +195,8 @@ var IpcFlux = function () {
 
 		var dispatch = this.dispatch,
 		    dispatchExternal = this.dispatchExternal,
-		    commit = this.commit;
+		    commit = this.commit,
+		    commitExternal = this.commitExternal;
 
 
 		this.dispatch = function (type, payload) {
@@ -232,8 +226,13 @@ var IpcFlux = function () {
 			});
 		};
 
-		this.commit = function (type, payload, options) {
-			return commit.call(instance, type, payload, options);
+		this.commit = function (mutation, payload, options) {
+			commit.call(instance, mutation, payload, options);
+		};
+
+		this.commitExternal = function (target, mutation, payload, options) {
+			// return a promise of the dispatch, resolving on callback
+			commitExternal.call(instance, target, mutation, payload, options);
 		};
 
 		// register all actions defined in the class constructor options
@@ -244,6 +243,11 @@ var IpcFlux = function () {
 		// register all mutations defined in the class constructor options
 		Object.keys(mutations).forEach(function (mutation) {
 			_this.registerMutation(mutation, mutations[mutation]);
+		});
+
+		// register all getters defined in the class constructor options
+		Object.keys(getters).forEach(function (getter) {
+			_this.registerGetter(getter, getters[getter]);
 		});
 
 		this.debug = {
@@ -387,30 +391,66 @@ var IpcFlux = function () {
 		}
 	}, {
 		key: 'commitExternal',
-		value: function commitExternal(_target, _type, _payload, _options) {
+		value: function commitExternal(_target, _mutation, _payload, _options) {
 			var instance = this;
 
 			var arg = {
 				process: Process.type(),
-				callType: 'commit'
+				callType: 'mutation'
 			};
 
-			var _target$type$payload$ = {
+			var _target$mutation$payl = {
 				target: _target,
-				type: _type,
+				mutation: _mutation,
 				payload: _payload,
 				options: _options
 			},
-			    target = _target$type$payload$.target,
-			    type = _target$type$payload$.type,
-			    payload = _target$type$payload$.payload,
-			    options = _target$type$payload$.options;
+			    target = _target$mutation$payl.target,
+			    mutation = _target$mutation$payl.mutation,
+			    payload = _target$mutation$payl.payload,
+			    options = _target$mutation$payl.options;
 
-			// if (Process.is('main')) {
 
-			// } else if (Process.is('renderer')) {
+			if (Process.is('main')) {
+				if ((typeof target === 'undefined' ? 'undefined' : _typeof(target)) !== 'object' && typeof target !== 'number') {
+					console.error('[IpcFlux] target passed is not instanceof BrowserWindow or an active BrowserWindow\'s id');
+					return;
+				}
 
-			// }
+				target = typeof target === 'number' ? _electron.webContents.fromId(target) : target.webContents;
+
+				if (!target.webContents) {
+					console.error('[IpcFlux] target passed is not an instanceof BrowserWindow or an active BrowserWindow\'s id');
+					return;
+				}
+
+				if (typeof mutation !== 'string') {
+					console.error('[IpcFlux] mutation not passed as parameter');
+					return;
+				}
+
+				_electron.webContents.fromId(target.webContents.id).send(channels.call, _extends({}, arg, {
+					mutation: mutation,
+					payload: payload,
+					options: options,
+					// send the target BrowserWindow id for callback and error handling
+					target: target.webContents.id
+				}));
+			} else if (Process.is('renderer')) {
+				if (typeof target !== 'string') {
+					console.error('[IpcFlux] mutation not passed as parameter');
+					return;
+				}
+
+				// send a call to the main process to dispatch the action
+				_electron.ipcRenderer.send(channels.call, _extends({}, arg, {
+					mutation: target,
+					payload: mutation,
+					options: payload,
+					// send the current BrowserWindow id for callback and error handling
+					target: _electron.remote.getCurrentWindow().id
+				}));
+			}
 		}
 	}, {
 		key: 'registerAction',
@@ -442,10 +482,24 @@ var IpcFlux = function () {
 		value: function registerMutation(mutation, handler) {
 			var instance = this;
 
-			var entry = instance._mutations[mutation] || (instance._mutations[mutation] = []);
+			var entry = Array.isArray(instance._mutations[mutation]) ? instance._mutations[mutation] : instance._mutations[mutation] = [];
 			entry.push(function (payload) {
 				handler.call(instance, instance.state, payload);
 			});
+		}
+	}, {
+		key: 'registerGetter',
+		value: function registerGetter(getter, raw) {
+			var instance = this;
+
+			if (this._getters[getter]) {
+				console.log('[IpcFlux] duplicate getter key');
+				return;
+			}
+
+			this._getters[getter] = function () {
+				return raw(instance.state, instance.getters);
+			};
 		}
 	}, {
 		key: '_withCommit',

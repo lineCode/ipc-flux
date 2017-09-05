@@ -20,6 +20,11 @@ const ipcFlux = new IpcFlux({
 		action3: ({ dispatchExternal }) => {
 			dispatchExternal(3, 'action2');
 		}
+	},
+	mutations: {
+		mutation1: () => {
+			console.log('heelllooo');
+		}
 	}
 });
 
