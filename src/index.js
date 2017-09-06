@@ -14,7 +14,6 @@
 //
 //	MIT license
 //
-//
 
 import { ipcMain, ipcRenderer, webContents, remote } from 'electron';
 
@@ -31,11 +30,9 @@ const channels = {
 };
 
 // remove all existing IpcFlux listeners
-const rmListeners = () => {
-	const emitter = Process.is('main') ? ipcMain : ipcRenderer;
-
+const removeExistingListeners = () => {
 	Object.values(channels).forEach(channel => {
-		emitter.removeAllListeners(channel);
+		Process.emitter().removeAllListeners(channel);
 	});
 };
 
@@ -46,29 +43,28 @@ class IpcFlux {
 			assert(typeof Promise === 'undefined', 'Promises are required');
 		}
 
-		// remove IpcFlux listeners
-		rmListeners();
+		removeExistingListeners();
 
-		const { actions = {}, mutations = {}, getters = {}, config = {} } = options;
+		const { id, actions = {}, mutations = {}, getters = {}, config = {}, state } = options;
 
-		let { state } = options;
-
+		// check if state is defined or is an object with something in it
 		assert((state !== undefined || (typeof state === 'object' && Object.keys(state).length > 0)) && Process.is('renderer'), 'initial state must be declared in main process');
 
-		if (Process.is('main')) {
-			state = state || {};
-		}
+		// defined due to `this` being reassigned in arrow functions
+		const flux = this;
 
-		// defined due to `this` being reassigned in arrow functions (grr)
-		const instance = this;
+		// window reference id, if no custom id is specified, use the browserWindow id or 'main'
+		this._id = id || (Process.is('renderer') ? remote.getCurrentWindow().id : 'main');
 
+		// define globs used throughout
 		this._committing = false;
 		this._actions = Object.create(null);
 		this._mutations = Object.create(null);
 		this._getters = Object.create(null);
 		this._subscribers = [];
 
-		this._config = Object.create(null);
+		// state still needs to be defined within renderer instances, just not from initial config, hence the assert above
+		this.state = Process.is('main') ? state || {} : {};
 
 		this._config = {
 			maxListeners: 50,
@@ -77,11 +73,11 @@ class IpcFlux {
 		};
 
 		// the listener to be called for actions
-		const actionEmitHandler = (event, arg) => {
-			if (instance.actionExists(arg.action)) {
+		const actionRouteHandler = (event, arg) => {
+			if (flux.actionExists(arg.action)) {
 				const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
 
-				const act = dispatch.call(instance, { ...arg, target }, arg.action, arg.payload);
+				const act = dispatch.call(flux, { ...arg, target }, arg.action, arg.payload);
 
 				if (isPromise(act)) {
 					// on Promise complete, send a callback to the dispatcher
@@ -106,16 +102,15 @@ class IpcFlux {
 			}
 		};
 
-		const mutationEmitHandler = (event, arg) => {
-			if (instance.mutationExists(arg.mutation)) {
-				const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
-
-				commit.call(instance, { ...arg, target }, arg.mutation, arg.payload);
+		// the listener to be called for mutations
+		const mutationRouteHandler = (event, arg) => {
+			if (flux.mutationExists(arg.mutation)) {
+				commit.call(flux, arg.mutation, arg.payload);
 			}
 		};
 
-		// run on `channel.call`
-		const emitterCallListener = (event, arg) => {
+		// because a single channel (`channel.call`) is used for all callers, route different calls to their required handler
+		const routeCall = (event, arg) => {
 			if (typeof arg !== 'object') {
 				return;
 			}
@@ -123,10 +118,10 @@ class IpcFlux {
 			switch (arg.callType) {
 			// if the call type is an action, let `actionEmitHandler` handle it
 			case 'action':
-				actionEmitHandler(event, arg);
+				actionRouteHandler(event, arg);
 				break;
 			case 'mutation':
-				mutationEmitHandler(event, arg);
+				mutationRouteHandler(event, arg);
 				break;
 			default:
 				break;
@@ -139,9 +134,9 @@ class IpcFlux {
 		emitter.setMaxListeners(this._config.maxListeners);
 
 		// the emitter event handlers for calls and errors
-		emitter.on(channels.call, emitterCallListener);
+		emitter.on(channels.call, routeCall);
 
-		emitter.on(channels.error, (event, err) => {
+		const errorCallHandler = (event, err) => {
 			if (typeof err === 'object') {
 				switch (err.type) {
 				case 'throw':
@@ -162,12 +157,14 @@ class IpcFlux {
 			} else {
 				console.error(err);
 			}
-		});
+		};
+
+		emitter.on(channels.error, errorCallHandler);
 
 		const { dispatch, dispatchExternal, commit, commitExternal } = this;
 
 		this.dispatch = (type, payload) => {
-			return dispatch.call(instance, {
+			return dispatch.call(flux, {
 				process: Process.type(),
 				target: Process.is('renderer') ? remote.getCurrentWindow().id : 0
 			}, type, payload);
@@ -175,7 +172,7 @@ class IpcFlux {
 
 		this.dispatchExternal = (target, action, payload) => {
 			// return a promise of the dispatch, resolving on callback
-			dispatchExternal.call(instance, target, action, payload);
+			dispatchExternal.call(flux, target, action, payload);
 
 			return new Promise((resolve, reject) => {
 				// only resolve if the action callback is the same as that called, then remove the callback handler
@@ -194,12 +191,12 @@ class IpcFlux {
 		};
 
 		this.commit = (mutation, payload, options) => {
-			commit.call(instance, mutation, payload, options);
+			commit.call(flux, mutation, payload, options);
 		};
 
 		this.commitExternal = (target, mutation, payload, options) => {
 			// return a promise of the dispatch, resolving on callback
-			commitExternal.call(instance, target, mutation, payload, options);
+			commitExternal.call(flux, target, mutation, payload, options);
 		};
 
 		// register all actions defined in the class constructor options
@@ -269,15 +266,15 @@ class IpcFlux {
 		if (Process.is('main')) {
 			// checks target is an instance of BrowserWindow, or if is a BrowserWindow id
 			if (typeof target !== 'object' && typeof target !== 'number') {
-				console.error('[IpcFlux] target passed is not instanceof BrowserWindow or an active BrowserWindow\'s id');
+				console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
 				return;
 			}
 
-			// converts BrowserWindow or BrowserWindow id to webContents for instance checking
+			// converts BrowserWindow or BrowserWindow id to webContents for flux checking
 			target = typeof target === 'number' ? webContents.fromId(target) : target.webContents;
 
 			if (!target.webContents) {
-				console.error('[IpcFlux] target passed is not an instanceof BrowserWindow or an active BrowserWindow\'s id');
+				console.error('[IpcFlux] target passed is not an instance of BrowserWindow or active BrowserWindow id');
 				return;
 			}
 
@@ -311,7 +308,7 @@ class IpcFlux {
 	}
 
 	commit(_type, _payload, _options) {
-		const instance = this;
+		const flux = this;
 
 		let { type, payload, options } = {
 			type: _type,
@@ -327,7 +324,7 @@ class IpcFlux {
 			return;
 		}
 
-		instance._withCommit(() => {
+		flux._withCommit(() => {
 			entry.forEach(handler => {
 				handler(payload);
 			});
@@ -337,7 +334,7 @@ class IpcFlux {
 	}
 
 	commitExternal(_target, _mutation, _payload, _options) {
-		const instance = this;
+		const flux = this;
 
 		const arg = {
 			process: Process.type(),
@@ -353,14 +350,14 @@ class IpcFlux {
 
 		if (Process.is('main')) {
 			if (typeof target !== 'object' && typeof target !== 'number') {
-				console.error('[IpcFlux] target passed is not instanceof BrowserWindow or an active BrowserWindow\'s id');
+				console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
 				return;
 			}
 
 			target = typeof target === 'number' ? webContents.fromId(target) : target.webContents;
 
 			if (!target.webContents) {
-				console.error('[IpcFlux] target passed is not an instanceof BrowserWindow or an active BrowserWindow\'s id');
+				console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
 				return;
 			}
 
@@ -396,18 +393,21 @@ class IpcFlux {
 	}
 
 	registerAction(action, handler) {
-		const instance = this;
+		const flux = this;
 
 		// checks if action is in `_actions` array, if not, create an array at the required key
-		const entry = Array.isArray(instance._actions[action]) ? instance._actions[action] : instance._actions[action] = [];
+		const entry = Array.isArray(flux._actions[action]) ? flux._actions[action] : flux._actions[action] = [];
 
 		// add the action to the array
 		// note that this allows actions to be created using the same action_name, but with different handlers without being overwritten
 		entry.push((payload, cb) => {
 			// add the handler to `_actions`, passing in { dispatch, dispatchExternal } for use within the action, as well as the payload and callback
 			let res = handler({
-				dispatch: instance.dispatch,
-				dispatchExternal: instance.dispatchExternal
+				dispatch: flux.dispatch,
+				dispatchExternal: flux.dispatchExternal,
+				commit: flux.commit,
+				commitExternal: flux.commitExternal,
+				state: flux.state
 			}, payload, cb);
 
 			// if not already a Promise, make it one
@@ -420,16 +420,16 @@ class IpcFlux {
 	}
 
 	registerMutation(mutation, handler) {
-		const instance = this;
+		const flux = this;
 
-		const entry = Array.isArray(instance._mutations[mutation]) ? instance._mutations[mutation] : instance._mutations[mutation] = [];
+		const entry = Array.isArray(flux._mutations[mutation]) ? flux._mutations[mutation] : flux._mutations[mutation] = [];
 		entry.push((payload) => {
-			handler.call(instance, instance.state, payload);
+			handler.call(flux, flux.state, payload);
 		});
 	}
 
 	registerGetter(getter, raw) {
-		const instance = this;
+		const flux = this;
 
 		if (this._getters[getter]) {
 			console.log('[IpcFlux] duplicate getter key');
@@ -437,7 +437,7 @@ class IpcFlux {
 		}
 
 		this._getters[getter] = () => {
-			return raw(instance.state, instance.getters);
+			return raw(flux.state, flux.getters);
 		};
 	}
 

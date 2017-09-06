@@ -10,23 +10,35 @@ let mainWindows = [];
 const IpcFlux = require('../build/index.js').default;
 
 const ipcFlux = new IpcFlux({
+	state: {
+		a: 1
+	},
 	actions: {
-		action1: ({ dispatchExternal }) => {
+		action1: ({ dispatchExternal, state, commit }) => {
+			console.log(state);
+			commit('mutation2');
 			dispatchExternal(2, 'action2');
 		},
-		action2: ({ dispatchExternal }) => {
+		action2: ({ dispatchExternal, state }) => {
+			console.log(state);
 			dispatchExternal(1, 'action2');
 		},
-		action3: ({ dispatchExternal }) => {
+		action3: ({ dispatchExternal, state }) => {
+			console.log(state);
 			dispatchExternal(3, 'action2');
 		}
 	},
 	mutations: {
 		mutation1: () => {
 			console.log('heelllooo');
+		},
+		mutation2: () => {
+			console.log('byeee');
 		}
 	}
 });
+
+console.dir(ipcFlux)
 
 function createWindow (d) {
 	mainWindows[d] = new BrowserWindow({

@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", {
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
+var _electron = require('electron');
+
 var isPromise = function isPromise(val) {
 	return val && typeof val.then === 'function';
 };
@@ -40,6 +42,9 @@ var Process = {
 	// explicit process type checking
 	is: function is(type) {
 		return type === Process.type();
+	},
+	emitter: function emitter() {
+		return Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
 	},
 	// environment checking
 	env: {

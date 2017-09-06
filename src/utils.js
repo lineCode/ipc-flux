@@ -1,3 +1,5 @@
+import { ipcMain, ipcRenderer } from 'electron';
+
 const isPromise = val => {
 	return val && typeof val.then === 'function';
 };
@@ -32,6 +34,9 @@ const Process = {
 	// explicit process type checking
 	is: type => {
 		return type === Process.type();
+	},
+	emitter: () => {
+		return Process.is('main') ? ipcMain : ipcRenderer;
 	},
 	// environment checking
 	env: {
