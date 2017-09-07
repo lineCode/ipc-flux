@@ -8,39 +8,39 @@ const ipcFlux = new IpcFlux({
 			return 'action1 main';
 		},
 		action2: ({ dispatch }) => {
-			return dispatch('action1');
+			return dispatch('local', 'action1');
 		},
-		action3: ({ dispatchExternal }) => {
-			return dispatchExternal(rendererWindowId, 'action1');
+		action3: ({ dispatch }) => {
+			return dispatch(rendererWindowId, 'action1');
 		},
 		actions3point5: ({}, payload) => {
 			return payload;
 		},
 		action4: ({ dispatch }, payload) => {
-			return dispatch('actions3point5', payload);
+			return dispatch('local', 'actions3point5', payload);
 		},
-		action5: ({ dispatchExternal }, payload) => {
-			return dispatchExternal(rendererWindowId, 'action1', payload);
+		action5: ({ dispatch }, payload) => {
+			return dispatch(rendererWindowId, 'action1', payload);
 		},
-		action6: ({ dispatch, dispatchExternal }, payload) => {
+		action6: ({ dispatch }, payload) => {
 			return new Promise((resolve) => {
-				dispatchExternal(rendererWindowId, 'action1', payload).then((data) => {
-					return dispatch('actions3point5', data);
+				dispatch(rendererWindowId, 'action1', payload).then((data) => {
+					return dispatch('local', 'actions3point5', data);
 				}).then((data) => {
 					resolve(data + payload);
 				});
 			});
 		},
-		chainDispatch: ({ dispatch, dispatchExternal }) => {
-			return dispatch('chainDispatch1');
+		chainDispatch: ({ dispatch }) => {
+			return dispatch('local', 'chainDispatch1');
 		},
-		chainDispatch1: ({ dispatch, dispatchExternal }) => {
-			return dispatch('chainDispatch2');
+		chainDispatch1: ({ dispatch }) => {
+			return dispatch('local', 'chainDispatch2');
 		},
-		chainDispatch2: ({ dispatch, dispatchExternal }) => {
-			return dispatch('chainDispatch3');
+		chainDispatch2: ({ dispatch }) => {
+			return dispatch('local', 'chainDispatch3');
 		},
-		chainDispatch3: ({ dispatch, dispatchExternal }) => {
+		chainDispatch3: ({ dispatch }) => {
 			return 'chain dispatch';
 		},
 	}

@@ -135,104 +135,104 @@ describe('Renderer', () => {
 			});
 		});
 
-		// describe('external', () => {
-		// 	it('dispatch', (done) => {
-		// 		const ipcFlux = new IpcFlux();
-		// 		ipcFlux.dispatch('main', 'action1').should.eventually.equal('action1 main').notify(done);
-		// 	});
+		describe('external', () => {
+			it('dispatch', (done) => {
+				const ipcFlux = new IpcFlux();
+				ipcFlux.dispatch('main', 'action1').should.eventually.equal('action1 main').notify(done);
+			});
 
-		// 	it('dispatchExternal ({ dispatch })', (done) => {
-		// 		const ipcFlux = new IpcFlux({
-		// 			actions: {
-		// 				action1: () => {
-		// 					return 'action1 renderer';
-		// 				}
-		// 			}
-		// 		});
+			it('dispatch ({ dispatch })', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: () => {
+							return 'action1 renderer';
+						}
+					}
+				});
 
-		// 		ipcFlux.dispatchExternal('action2').should.eventually.equal('action1 main').notify(done);
-		// 	});
+				ipcFlux.dispatch('main', 'action2').should.eventually.equal('action1 main').notify(done);
+			});
 
-		// 	it('dispatchExternal ({ dispatchExternal })', (done) => {
-		// 		const ipcFlux = new IpcFlux({
-		// 			actions: {
-		// 				action1: () => {
-		// 					return 'action1 renderer';
-		// 				}
-		// 			}
-		// 		});
+			it('dispatch ({ dispatch }) (main)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: () => {
+							return 'action1 renderer';
+						}
+					}
+				});
 
-		// 		ipcFlux.dispatchExternal('action3').should.eventually.equal('action1 renderer').notify(done);
-		// 	});
+				ipcFlux.dispatch('main', 'action3').should.eventually.equal('action1 renderer').notify(done);
+			});
 
-		// 	it('dispatchExternal ({ dispatch }, payload)', (done) => {
-		// 		const ipcFlux = new IpcFlux({
-		// 			actions: {
-		// 				action1: () => {
-		// 					return 'action1 renderer';
-		// 				}
-		// 			}
-		// 		});
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: () => {
+							return 'action1 renderer';
+						}
+					}
+				});
 
-		// 		ipcFlux.dispatchExternal('action4', 'payload').should.eventually.equal('payload').notify(done);
-		// 	});
+				ipcFlux.dispatch('main', 'action4', 'payload').should.eventually.equal('payload').notify(done);
+			});
 
-		// 	it('dispatchExternal ({ dispatchExternal }, payload)', (done) => {
-		// 		const ipcFlux = new IpcFlux({
-		// 			actions: {
-		// 				action1: ({}, payload) => {
-		// 					return payload;
-		// 				}
-		// 			}
-		// 		});
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
+						}
+					}
+				});
 
-		// 		ipcFlux.dispatchExternal('action5', 'payload').should.eventually.equal('payload').notify(done);
-		// 	});
+				ipcFlux.dispatch('main', 'action5', 'payload').should.eventually.equal('payload').notify(done);
+			});
 
-		// 	it('dispatchExternal ({ dispatch, dispatchExternal }, payload)', (done) => {
-		// 		const ipcFlux = new IpcFlux({
-		// 			actions: {
-		// 				action1: ({}, payload) => {
-		// 					return payload;
-		// 				}
-		// 			}
-		// 		});
+			it('dispatch ({ dispatch }, payload) (main)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
+						}
+					}
+				});
 
-		// 		ipcFlux.dispatchExternal('action6', 'payload').should.eventually.equal('payloadpayload').notify(done);
-		// 	});
+				ipcFlux.dispatch('main', 'action6', 'payload').should.eventually.equal('payloadpayload').notify(done);
+			});
 
-		// 	it('dispatchExternal (chain)', (done) => {
-		// 		const ipcFlux = new IpcFlux({
-		// 			actions: {
-		// 				action1: ({}, payload) => {
-		// 					return payload;
-		// 				}
-		// 			}
-		// 		});
+			it('dispatch (main) (chain)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
+						}
+					}
+				});
 
-		// 		ipcFlux.dispatchExternal('chainDispatch').should.eventually.equal('chain dispatch').notify(done);
-		// 	});
+				ipcFlux.dispatch('main', 'chainDispatch').should.eventually.equal('chain dispatch').notify(done);
+			});
 
-		// 	it('dispatchExternal simultaneous', (done) => {
-		// 		const ipcFlux = new IpcFlux({
-		// 			actions: {
-		// 				action1: ({ dispatchExternal }) => {
-		// 					return new Promise((resolve) => {
-		// 						setTimeout(() => {
-		// 							resolve(dispatchExternal('chainDispatch'));
-		// 						}, 100);
-		// 					});
-		// 				},
-		// 				action2: ({ dispatchExternal }) => {
-		// 					return dispatchExternal('action1');
-		// 				}
-		// 			}
-		// 		});
+			it('dispatch (main) simultaneous', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({ dispatch }) => {
+							return new Promise((resolve) => {
+								setTimeout(() => {
+									resolve(dispatch('main', 'chainDispatch'));
+								}, 100);
+							});
+						},
+						action2: ({ dispatch }) => {
+							return dispatch('main', 'action1');
+						}
+					}
+				});
 
-		// 		ipcFlux.dispatch('action1').should.eventually.equal('chain dispatch').notify(done);
+				ipcFlux.dispatch('local', 'action1').should.eventually.equal('chain dispatch').notify(done);
 
-		// 		ipcFlux.dispatch('action2').should.eventually.equal('action1 main');
-		// 	});
-		// });
+				ipcFlux.dispatch('local', 'action2').should.eventually.equal('action1 main');
+			});
+		});
 	});
 });
