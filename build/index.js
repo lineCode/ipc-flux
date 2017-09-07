@@ -130,14 +130,25 @@ var IpcFlux = function () {
 				}
 			} else {
 				if (Process.is('main')) {
-					// relay
-					// webContents.fromId(arg.target).send(channels.call, {...arg});
+					var _act = flux.dispatch(arg.target, arg.action, arg.payload);
+
+					if (isPromise(_act)) {
+						_act.then(function (data) {
+
+							event.sender.send(channels.callback, _extends({}, arg, {
+								data: data
+							}));
+						});
+					} else {
+						event.sender.send(channels.error, '[IpcFlux] \'' + arg.action + '\' action called from ' + arg.process + ' process, in ' + Process.type() + ' process, did not return a Promise');
+						event.sender.send(channels.callback, _extends({}, arg));
+					}
 				} else if (Process.is('renderer')) {
 					if (flux.actionExists(arg.action)) {
-						var _act = dispatch.call(flux, 'local', arg.action, arg.payload);
+						var _act2 = dispatch.call(flux, 'local', arg.action, arg.payload);
 
-						if (isPromise(_act)) {
-							_act.then(function (data) {
+						if (isPromise(_act2)) {
+							_act2.then(function (data) {
 								event.sender.send(channels.callback, _extends({}, arg, {
 									data: data
 								}));
@@ -237,7 +248,7 @@ var IpcFlux = function () {
 
 
 		this.dispatch = function (target, type, payload) {
-			if (target === 'local') {
+			if (target === 'local' || !Process.is('main') && target === _electron.remote.getCurrentWindow().id) {
 				return dispatch.call(flux, target, type, payload);
 			} else {
 				dispatch.call(flux, target, type, payload);
@@ -247,7 +258,7 @@ var IpcFlux = function () {
 					var listener = function listener(event, arg) {
 						if (arg.target === target) {
 							emitter.removeListener(channels.callback, listener);
-							resolve(arg.data || undefined);
+							resolve(arg.data);
 						} else {
 							reject();
 						}
@@ -314,7 +325,7 @@ var IpcFlux = function () {
 			    payload = _target$action$payloa.payload;
 
 
-			if (target === 'local' || Process.is('main') && target === 'main') {
+			if (target === 'local' || Process.is('main') && target === 'main' || !Process.is('main') && target === _electron.remote.getCurrentWindow().id) {
 				var entry = this._actions[action];
 
 				if (!entry) {
@@ -327,6 +338,7 @@ var IpcFlux = function () {
 			} else {
 				var arg = {
 					process: Process.type(),
+					caller: Process.is('renderer') ? _electron.remote.getCurrentWindow().id : 'main',
 					callType: 'action'
 				};
 
@@ -359,20 +371,13 @@ var IpcFlux = function () {
 					return;
 				}
 
-				if (Process.is('main')) {
-					console.log(_id);
-					_electron.webContents.fromId(_id).send(channels.call, _extends({}, arg, {
-						action: action,
-						payload: payload,
-						target: _id
-					}));
-				} else if (Process.is('renderer')) {
-					_electron.ipcRenderer.send(channels.call, _extends({}, arg, {
-						action: action,
-						payload: payload,
-						target: _id
-					}));
-				}
+				var emitter = Process.is('main') ? _electron.webContents.fromId(_id) : _electron.ipcRenderer;
+
+				emitter.send(channels.call, _extends({}, arg, {
+					action: action,
+					payload: payload,
+					target: _id
+				}));
 			}
 		}
 	}, {

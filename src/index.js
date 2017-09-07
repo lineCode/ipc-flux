@@ -98,8 +98,22 @@ class IpcFlux {
 				}
 			} else {
 				if (Process.is('main')) {
-					// relay
-					// webContents.fromId(arg.target).send(channels.call, {...arg});
+					const act = flux.dispatch(arg.target, arg.action, arg.payload);
+
+					if (isPromise(act)) {
+						act.then(data => {
+
+							event.sender.send(channels.callback, {
+								...arg,
+								data
+							});
+						});
+					} else {
+						event.sender.send(channels.error, `[IpcFlux] '${arg.action}' action called from ${arg.process} process, in ${Process.type()} process, did not return a Promise`);
+						event.sender.send(channels.callback, {
+							...arg
+						});
+					}
 				} else if (Process.is('renderer')) {
 					if (flux.actionExists(arg.action)) {
 						const act = dispatch.call(flux, 'local', arg.action, arg.payload);
@@ -203,7 +217,7 @@ class IpcFlux {
 		const { dispatch, dispatchExternal, commit, commitExternal } = this;
 
 		this.dispatch = (target, type, payload) => {
-			if (target === 'local') {
+			if (target === 'local' || (!Process.is('main') && target === remote.getCurrentWindow().id)) {
 				return dispatch.call(flux, target, type, payload);
 			} else {
 				dispatch.call(flux, target, type, payload);
@@ -213,7 +227,7 @@ class IpcFlux {
 					const listener = (event, arg) => {
 						if (arg.target === target) {
 							emitter.removeListener(channels.callback, listener);
-							resolve(arg.data || undefined);
+							resolve(arg.data);
 						} else {
 							reject();
 						}
@@ -272,7 +286,7 @@ class IpcFlux {
 			payload: _payload
 		};
 
-		if (target === 'local' || (Process.is('main') && target === 'main')) {
+		if (target === 'local' || (Process.is('main') && target === 'main') || (!Process.is('main') && target === remote.getCurrentWindow().id)) {
 			const entry = this._actions[action];
 
 			if (!entry) {
@@ -283,6 +297,7 @@ class IpcFlux {
 		} else {
 			const arg = {
 				process: Process.type(),
+				caller: Process.is('renderer') ? remote.getCurrentWindow().id : 'main',
 				callType: 'action'
 			};
 
@@ -315,22 +330,15 @@ class IpcFlux {
 				return;
 			}
 
-			if (Process.is('main')) {
-				console.log(_id);
-				webContents.fromId(_id).send(channels.call, {
-					...arg,
-					action,
-					payload,
-					target: _id
-				});
-			} else if (Process.is('renderer')) {
-				ipcRenderer.send(channels.call, {
-					...arg,
-					action,
-					payload,
-					target: _id
-				});
-			}
+
+			const emitter = Process.is('main') ? webContents.fromId(_id) : ipcRenderer;
+
+			emitter.send(channels.call, {
+				...arg,
+				action,
+				payload,
+				target: _id
+			});
 		}
 	}
 
