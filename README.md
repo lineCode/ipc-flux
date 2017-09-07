@@ -5,6 +5,9 @@
 [![npm](https://img.shields.io/npm/v/ipc-flux.svg?style=flat-square)](https://www.npmjs.com/package/ipc-flux)
 [![npm](https://img.shields.io/npm/dt/ipc-flux.svg?style=flat-square)](https://www.npmjs.com/package/ipc-flux)
 
+
+## NOTE: `ipc-flux` is currently undergoing MAJOR development with significant changes. Documentation may not be correct, and or up to date.
+
 ### installation
 ```bash
 $ npm i ipc-flux -S
@@ -45,9 +48,9 @@ const ipcflux = new IpcFlux({
 			console.log('hello');
 		},
 		init2: ({ dispatch }) => {
-			dispatch('init');
+			dispatch('local', 'init');
 		},
-		init3: ({ dispatch, dispatchExternal }, payload) => {
+		init3: ({ dispatch }, payload) => {
 			console.log(payload);
 			return 'init3';
 		}
@@ -60,7 +63,7 @@ or, register actions as required
 ```js
 const ipcFlux = new IpcFlux();
 
-ipcFlux.registerAction('ACTION_NAME', ({ dispatch, dispatchExternal }, payload) => {
+ipcFlux.registerAction('ACTION_NAME', ({ dispatch }, payload) => {
 	...
 });
 ```
@@ -71,24 +74,18 @@ ipcFlux.registerAction('ACTION_NAME', ({ dispatch, dispatchExternal }, payload) 
 ipcFlux.dispatch('init');
 ```
 
-### Dispatching Actions in the External Process (Main)
+### Dispatching Actions in an External Process
 
 ```js
-// NOTE: You must pass in the targetBrowserWindow, or the targetBrowserWindow id
+// NOTE: You must pass in the targetBrowserWindow, or the targetBrowserWindow id, or the defined instance id
 // to dispatch renderer actions from the main process
-ipcFlux.dispatchExternal(targetBrowserWindow, 'init');
-```
-
-### Dispatching Actions in the External Process (Renderer)
-
-```js
-ipcFlux.dispatchExternal('init');
+ipcFlux.dispatch(targetBrowserWindow, 'init');
 ```
 
 ### Dispatching with Payloads
 
 ```js
-ipcFlux.dispatch('init', PAYLOAD);
+ipcFlux.dispatch('local', 'init', PAYLOAD);
 ```
 
 ### Accessing Returned Data
@@ -96,11 +93,11 @@ ipcFlux.dispatch('init', PAYLOAD);
 Each dispatch returns a promise, because async!
 
 ```js
-ipcFlux.dispatch('init').then((data) => {
+ipcFlux.dispatch('local', 'init').then((data) => {
 	console.log(data); // returned from `init`
 });
 
-ipcFlux.dispatchExternal('init').then((data) => {
+ipcFlux.dispatch(ID, 'init').then((data) => {
 	console.log(data); // returned from `init`
 });
 ```
@@ -122,9 +119,9 @@ const ipcFlux = new IpcFlux({
 	}
 });
 
-ipcFlux.dispatch('action1');
+ipcFlux.dispatch('local', 'action1');
 
-ipcFlux.dispatch('action2').then((data) => {
+ipcFlux.dispatch('local', 'action2').then((data) => {
 	console.log(data);
 });
 ```
@@ -152,8 +149,8 @@ import IpcFlux from 'ipc-flux';
 
 const ipcFlux = new IpcFlux({
 	actions: {
-		action1: ({dispatchExternal}) => {
-			dispatchExternal('action3');
+		action1: ({ dispatch }) => {
+			dispatch(ID, 'action3');
 		},
 		action2: () => {
 			console.log('action2');
@@ -162,7 +159,7 @@ const ipcFlux = new IpcFlux({
 });
 
 setTimeout(() => {
-	ipcFlux.dispatch('action1');
+	ipcFlux.dispatch('local', 'action1');
 }, 500);
 ```
 
@@ -180,8 +177,8 @@ import IpcFlux from 'ipc-flux';
 
 const ipcFlux = new IpcFlux({
 	actions: {
-		action1: ({dispatchExternal}) => {
-			dispatchExternal('action3');
+		action1: ({ dispatch }) => {
+			dispatch(ID, 'action3');
 		},
 		action2: () => {
 			console.log('action2');
@@ -190,7 +187,7 @@ const ipcFlux = new IpcFlux({
 });
 
 setTimeout(() => {
-	ipcFlux.dispatch('action1');
+	ipcFlux.dispatch('local', 'action1');
 }, 500);
 ```
 
@@ -199,5 +196,6 @@ setTimeout(() => {
 - `IpcFlux-Call`
 - `IpcFlux-Callback`
 - `IpcFlux-Error`
+- `IpcFlux-Processes`
 
 Please do **not** use the listed Ipc channels as doing so will probably interfere with the functionality of `IpcFlux`

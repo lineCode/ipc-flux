@@ -45,7 +45,8 @@ var channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
 	error: 'IpcFlux-Error',
-	state: 'IpcFlux-State'
+	state: 'IpcFlux-State',
+	processes: 'IpcFlux-Processes'
 };
 
 // remove all existing IpcFlux listeners
@@ -89,7 +90,7 @@ var IpcFlux = function () {
 		var flux = this;
 
 		// window reference id, if no custom id is specified, use the browserWindow id or 'main'
-		this._id = id || (Process.is('renderer') ? _electron.remote.getCurrentWindow().id : 'main');
+		this._id = Process.is('renderer') ? id || _electron.remote.getCurrentWindow().id : 'main';
 
 		// define globs used throughout
 		this._committing = false;
@@ -97,6 +98,8 @@ var IpcFlux = function () {
 		this._mutations = Object.create(null);
 		this._getters = Object.create(null);
 		this._subscribers = [];
+
+		this._instances = {};
 
 		// state still needs to be defined within renderer instances, just not from initial config, hence the assert above
 		this.state = Process.is('main') ? state || {} : {};
@@ -108,16 +111,40 @@ var IpcFlux = function () {
 
 		// the listener to be called for actions
 		var actionRouteHandler = function actionRouteHandler(event, arg) {
-			if (flux.actionExists(arg.action)) {
-				var target = Process.is('renderer') ? _electron.remote.getCurrentWindow().id : arg.target;
+			if (Process.is('main') && arg.target === 'main' || Process.is('renderer') && arg.target === _electron.remote.getCurrentWindow().id) {
+				if (flux.actionExists(arg.action)) {
+					var target = Process.is('renderer') ? _electron.remote.getCurrentWindow().id : arg.target;
+					var act = dispatch.call(flux, target, arg.action, arg.payload);
 
-				var act = dispatch.call(flux, _extends({}, arg, { target: target }), arg.action, arg.payload);
-
-				if (isPromise(act)) {
-					// on Promise complete, send a callback to the dispatcher
-					act.then(function (data) {
+					if (isPromise(act)) {
+						act.then(function (data) {
+							event.sender.send(channels.callback, _extends({}, arg, {
+								target: target,
+								data: data
+							}));
+						});
+					} else {
+						event.sender.send(channels.error, '[IpcFlux] \'' + arg.action + '\' action called from ' + arg.process + ' process, in ' + Process.type() + ' process, did not return a Promise');
 						event.sender.send(channels.callback, _extends({}, arg, {
-							target: target,
+							target: target
+						}));
+					}
+				}
+			} else if (Process.is('main') && arg.target !== 'main') {
+				_electron.webContents.fromId(arg.target).send(channels.call, _extends({}, arg));
+			} else {
+				event.sender.send(channels.error, '[IpcFlux] unknown action called from ' + arg.process + ' process, in ' + Process.type() + ' process: ' + arg.action);
+			}
+
+			if (flux.actionExists(arg.action)) {
+				var _target2 = Process.is('renderer') ? _electron.remote.getCurrentWindow().id : arg.target;
+				var _act = dispatch.call(flux, _target2, arg.action, arg.payload);
+
+				if (isPromise(_act)) {
+					// on Promise complete, send a callback to the dispatcher
+					_act.then(function (data) {
+						event.sender.send(channels.callback, _extends({}, arg, {
+							target: _target2,
 							data: data
 						}));
 					});
@@ -125,7 +152,7 @@ var IpcFlux = function () {
 					// send a callback to the dispatcher
 					event.sender.send(channels.error, '[IpcFlux] \'' + arg.action + '\' action called from ' + arg.process + ' process, in ' + Process.type() + ' process, did not return a Promise');
 					event.sender.send(channels.callback, _extends({}, arg, {
-						target: target
+						target: _target2
 					}));
 				}
 			} else {
@@ -162,8 +189,26 @@ var IpcFlux = function () {
 
 		// define the process emitter, minimizes code duplication
 		var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
-
 		emitter.setMaxListeners(this._config.maxListeners);
+
+		if (Process.is('main')) {
+			emitter.on(channels.processes, function (event, arg) {
+				if (arg.uid === 'main' || arg.uid === 'local') {
+					event.sender.send(channels.error, '[IpcFlux] instance id cannot be \'main\' or \'local\' (BrowserWindow: ' + arg.id + ')');
+				} else if (flux._instances[arg.uid]) {
+					event.sender.send(channels.error, '[IpcFlux] instance id \'' + arg.uid + '\' already defined (BrowserWindow: ' + arg.id + ')');
+				} else {
+					flux._instances[arg.uid] = arg.id;
+				}
+			});
+		}
+
+		if (Process.is('renderer')) {
+			emitter.send(channels.processes, {
+				uid: flux._id,
+				id: _electron.remote.getCurrentWindow().id
+			});
+		}
 
 		// the emitter event handlers for calls and errors
 		emitter.on(channels.call, routeCall);
@@ -199,31 +244,27 @@ var IpcFlux = function () {
 		    commitExternal = this.commitExternal;
 
 
-		this.dispatch = function (type, payload) {
-			return dispatch.call(flux, {
-				process: Process.type(),
-				target: Process.is('renderer') ? _electron.remote.getCurrentWindow().id : 0
-			}, type, payload);
-		};
+		this.dispatch = function (target, type, payload) {
+			if (target === 'local') {
+				return dispatch.call(flux, target, type, payload);
+			} else {
+				dispatch.call(flux, target, type, payload);
 
-		this.dispatchExternal = function (target, action, payload) {
-			// return a promise of the dispatch, resolving on callback
-			dispatchExternal.call(flux, target, action, payload);
+				return new Promise(function (resolve, reject) {
+					// only resolve if the action callback is the same as that called, then remove the callback handler
+					var listener = function listener(event, arg) {
+						if (Process.is('renderer') ? arg.action === target : arg.action === action) {
+							emitter.removeListener(channels.callback, listener);
+							resolve(arg.data);
+						} else {
+							reject();
+						}
+					};
 
-			return new Promise(function (resolve, reject) {
-				// only resolve if the action callback is the same as that called, then remove the callback handler
-				var listener = function listener(event, arg) {
-					if (Process.is('renderer') ? arg.action === target : arg.action === action) {
-						emitter.removeListener(channels.callback, listener);
-						resolve(arg.data);
-					} else {
-						reject();
-					}
-				};
-
-				// setup a callback listener
-				emitter.on(channels.callback, listener);
-			});
+					// setup a callback listener
+					emitter.on(channels.callback, listener);
+				});
+			}
 		};
 
 		this.commit = function (mutation, payload, options) {
@@ -268,40 +309,8 @@ var IpcFlux = function () {
 		}
 	}, {
 		key: 'dispatch',
-		value: function dispatch(_caller, _action, _payload) {
-			var _action$payload = {
-				action: _action,
-				payload: _payload
-			},
-			    action = _action$payload.action,
-			    payload = _action$payload.payload;
-
-
-			var entry = this._actions[action];
-
-			// if no action was found
-			if (!entry) {
-				// action was dispatched from this process, show the error in this process
-				if (_caller.process === Process.type()) {
-					console.error('[IpcFlux] unknown action: ' + action);
-				}
-				// action existence is checked in `actionListener` above, as we don't know the actions defined in the other process
-				return;
-			}
-
-			// return a promise of the action function
-			return entry.length > 1 ? Promise.all(entry.map(function (handler) {
-				return handler(payload);
-			})) : entry[0](payload);
-		}
-	}, {
-		key: 'dispatchExternal',
-		value: function dispatchExternal(_target, _action, _payload) {
-			// same for both process types
-			var arg = {
-				process: Process.type(),
-				callType: 'action'
-			};
+		value: function dispatch(_target, _action, _payload) {
+			var flux = this;
 
 			var _target$action$payloa = {
 				target: _target,
@@ -313,45 +322,60 @@ var IpcFlux = function () {
 			    payload = _target$action$payloa.payload;
 
 
-			if (Process.is('main')) {
-				// checks target is an instance of BrowserWindow, or if is a BrowserWindow id
-				if ((typeof target === 'undefined' ? 'undefined' : _typeof(target)) !== 'object' && typeof target !== 'number') {
-					console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
+			if (target === 'local' || target === _electron.remote.webContents().id) {
+				var entry = this._actions[action];
+
+				if (!entry) {
+					console.error('[IpcFlux] unknown action: ' + action);
 					return;
 				}
+				return entry.length > 1 ? Promise.all(entry.map(function (handler) {
+					return handler(payload);
+				})) : entry[0](payload);
+			} else {
+				var arg = {
+					process: Process.type(),
+					callType: 'action'
+				};
 
-				// converts BrowserWindow or BrowserWindow id to webContents for flux checking
-				target = typeof target === 'number' ? _electron.webContents.fromId(target) : target.webContents;
+				if (Process.is('main')) {
+					var _id2 = null;
 
-				if (!target.webContents) {
-					console.error('[IpcFlux] target passed is not an instance of BrowserWindow or active BrowserWindow id');
-					return;
+					if (typeof target === 'number') {
+						_id2 = typeof target === 'number' ? _electron.webContents.fromId(target) || null : null;
+
+						if (_id2 === null) {
+							console.error('[IpcFlux] target window id not valid: ' + target);
+							return;
+						}
+					}
+
+					if (typeof target === 'string') {
+						_id2 = flux._instances[target] || null;
+
+						if (_id2 === null) {
+							console.error('[IpcFlux] target not defined: ' + target);
+							return;
+						}
+					}
+
+					if (_id2 === null) {
+						console.error('[IpcFlux] target passed as parameter was not BrowserWindow id or a valid ipc-flux reference id');
+						return;
+					}
+
+					_electron.webContents.fromId(_id2).send(channels.call, _extends({}, arg, {
+						action: action,
+						payload: payload,
+						target: _id2
+					}));
+				} else if (Process.is('renderer')) {
+					_electron.ipcRenderer.send(channels.call, _extends({}, arg, {
+						action: action,
+						payload: payload,
+						target: _id
+					}));
 				}
-
-				if (typeof action !== 'string') {
-					console.error('[IpcFlux] action not passed as parameter');
-					return;
-				}
-
-				_electron.webContents.fromId(target.webContents.id).send(channels.call, _extends({}, arg, {
-					action: action,
-					payload: payload,
-					// send the target BrowserWindow id for callback and error handling
-					target: target.webContents.id
-				}));
-			} else if (Process.is('renderer')) {
-				if (typeof target !== 'string') {
-					console.error('[IpcFlux] action not passed as parameter');
-					return;
-				}
-
-				// send a call to the main process to dispatch the action
-				_electron.ipcRenderer.send(channels.call, _extends({}, arg, {
-					action: target,
-					payload: action,
-					// send the current BrowserWindow id for callback and error handling
-					target: _electron.remote.getCurrentWindow().id
-				}));
 			}
 		}
 	}, {
@@ -466,7 +490,6 @@ var IpcFlux = function () {
 				// add the handler to `_actions`, passing in { dispatch, dispatchExternal } for use within the action, as well as the payload and callback
 				var res = handler({
 					dispatch: flux.dispatch,
-					dispatchExternal: flux.dispatchExternal,
 					commit: flux.commit,
 					commitExternal: flux.commitExternal,
 					state: flux.state

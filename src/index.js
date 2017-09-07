@@ -26,7 +26,8 @@ const channels = {
 	call: 'IpcFlux-Call',
 	callback: 'IpcFlux-Callback',
 	error: 'IpcFlux-Error',
-	state: 'IpcFlux-State'
+	state: 'IpcFlux-State',
+	processes: 'IpcFlux-Processes'
 };
 
 // remove all existing IpcFlux listeners
@@ -54,7 +55,7 @@ class IpcFlux {
 		const flux = this;
 
 		// window reference id, if no custom id is specified, use the browserWindow id or 'main'
-		this._id = id || (Process.is('renderer') ? remote.getCurrentWindow().id : 'main');
+		this._id = Process.is('renderer') ? id || remote.getCurrentWindow().id : 'main';
 
 		// define globs used throughout
 		this._committing = false;
@@ -62,6 +63,8 @@ class IpcFlux {
 		this._mutations = Object.create(null);
 		this._getters = Object.create(null);
 		this._subscribers = [];
+
+		this._instances = {};
 
 		// state still needs to be defined within renderer instances, just not from initial config, hence the assert above
 		this.state = Process.is('main') ? state || {} : {};
@@ -74,10 +77,36 @@ class IpcFlux {
 
 		// the listener to be called for actions
 		const actionRouteHandler = (event, arg) => {
+			if ((Process.is('main') && arg.target === 'main') || (Process.is('renderer') && arg.target === remote.getCurrentWindow().id )) {
+				if (flux.actionExists(arg.action)) {
+					const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
+					const act = dispatch.call(flux, target, arg.action, arg.payload);
+
+					if (isPromise(act)) {
+						act.then(data => {
+							event.sender.send(channels.callback, {
+								...arg,
+								target,
+								data
+							});
+						});
+					} else {
+						event.sender.send(channels.error, `[IpcFlux] '${arg.action}' action called from ${arg.process} process, in ${Process.type()} process, did not return a Promise`);
+						event.sender.send(channels.callback, {
+							...arg,
+							target
+						});
+					}
+				}
+			} else if (Process.is('main') && arg.target !== 'main') {
+				webContents.fromId(arg.target).send(channels.call, {...arg});
+			} else {
+				event.sender.send(channels.error, `[IpcFlux] unknown action called from ${arg.process} process, in ${Process.type()} process: ${arg.action}`);
+			}
+
 			if (flux.actionExists(arg.action)) {
 				const target = Process.is('renderer') ? remote.getCurrentWindow().id : arg.target;
-
-				const act = dispatch.call(flux, { ...arg, target }, arg.action, arg.payload);
+				const act = dispatch.call(flux, target, arg.action, arg.payload);
 
 				if (isPromise(act)) {
 					// on Promise complete, send a callback to the dispatcher
@@ -130,8 +159,26 @@ class IpcFlux {
 
 		// define the process emitter, minimizes code duplication
 		const emitter = Process.is('main') ? ipcMain : ipcRenderer;
-
 		emitter.setMaxListeners(this._config.maxListeners);
+
+		if (Process.is('main')) {
+			emitter.on(channels.processes, (event, arg) => {
+				if (arg.uid === 'main' || arg.uid === 'local') {
+					event.sender.send(channels.error, `[IpcFlux] instance id cannot be 'main' or 'local' (BrowserWindow: ${arg.id})`);
+				} else if (flux._instances[arg.uid]) {
+					event.sender.send(channels.error, `[IpcFlux] instance id '${arg.uid}' already defined (BrowserWindow: ${arg.id})`);
+				} else {
+					flux._instances[arg.uid] = arg.id;
+				}
+			});
+		}
+
+		if (Process.is('renderer')) {
+			emitter.send(channels.processes, {
+				uid: flux._id,
+				id: remote.getCurrentWindow().id
+			});
+		}
 
 		// the emitter event handlers for calls and errors
 		emitter.on(channels.call, routeCall);
@@ -163,31 +210,27 @@ class IpcFlux {
 
 		const { dispatch, dispatchExternal, commit, commitExternal } = this;
 
-		this.dispatch = (type, payload) => {
-			return dispatch.call(flux, {
-				process: Process.type(),
-				target: Process.is('renderer') ? remote.getCurrentWindow().id : 0
-			}, type, payload);
-		};
+		this.dispatch = (target, type, payload) => {
+			if (target === 'local') {
+				return dispatch.call(flux, target, type, payload);
+			} else {
+				dispatch.call(flux, target, type, payload);
 
-		this.dispatchExternal = (target, action, payload) => {
-			// return a promise of the dispatch, resolving on callback
-			dispatchExternal.call(flux, target, action, payload);
+				return new Promise((resolve, reject) => {
+					// only resolve if the action callback is the same as that called, then remove the callback handler
+					const listener = (event, arg) => {
+						if (Process.is('renderer') ? arg.action === target : arg.action === action) {
+							emitter.removeListener(channels.callback, listener);
+							resolve(arg.data);
+						} else {
+							reject();
+						}
+					};
 
-			return new Promise((resolve, reject) => {
-				// only resolve if the action callback is the same as that called, then remove the callback handler
-				const listener = (event, arg) => {
-					if (Process.is('renderer') ? arg.action === target : arg.action === action) {
-						emitter.removeListener(channels.callback, listener);
-						resolve(arg.data);
-					} else {
-						reject();
-					}
-				};
-
-				// setup a callback listener
-				emitter.on(channels.callback, listener);
-			});
+					// setup a callback listener
+					emitter.on(channels.callback, listener);
+				});
+			}
 		};
 
 		this.commit = (mutation, payload, options) => {
@@ -228,82 +271,69 @@ class IpcFlux {
 		return Boolean(this._mutations[mutation]);
 	}
 
-	dispatch(_caller, _action, _payload) {
-		const { action, payload } = {
-			action: _action,
-			payload: _payload
-		};
+	dispatch(_target, _action, _payload) {
+		const flux = this;
 
-		const entry = this._actions[action];
-
-		// if no action was found
-		if (!entry) {
-			// action was dispatched from this process, show the error in this process
-			if (_caller.process === Process.type()) {
-				console.error(`[IpcFlux] unknown action: ${action}`);
-			}
-			// action existence is checked in `actionListener` above, as we don't know the actions defined in the other process
-			return;
-		}
-
-		// return a promise of the action function
-		return entry.length > 1 ? Promise.all(entry.map(handler => handler(payload))) : entry[0](payload);
-	}
-
-	dispatchExternal(_target, _action, _payload) {
-		// same for both process types
-		const arg = {
-			process: Process.type(),
-			callType: 'action'
-		};
-
-		let { target, action, payload } = {
+		const { target, action, payload } = {
 			target: _target,
 			action: _action,
 			payload: _payload
 		};
 
-		if (Process.is('main')) {
-			// checks target is an instance of BrowserWindow, or if is a BrowserWindow id
-			if (typeof target !== 'object' && typeof target !== 'number') {
-				console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
+		if (target === 'local' || target === remote.webContents().id) {
+			const entry = this._actions[action];
+
+			if (!entry) {
+				console.error(`[IpcFlux] unknown action: ${action}`);
 				return;
 			}
+			return entry.length > 1 ? Promise.all(entry.map(handler => handler(payload))) : entry[0](payload);
+		} else {
+			const arg = {
+				process: Process.type(),
+				callType: 'action'
+			};
 
-			// converts BrowserWindow or BrowserWindow id to webContents for flux checking
-			target = typeof target === 'number' ? webContents.fromId(target) : target.webContents;
+			if (Process.is('main')) {
+				let _id = null;
 
-			if (!target.webContents) {
-				console.error('[IpcFlux] target passed is not an instance of BrowserWindow or active BrowserWindow id');
-				return;
+				if (typeof target === 'number') {
+					_id = typeof target === 'number' ? webContents.fromId(target) || null : null;
+
+					if (_id === null) {
+						console.error(`[IpcFlux] target window id not valid: ${target}`);
+						return;
+					}
+				}
+
+				if (typeof target === 'string') {
+					_id = flux._instances[target] || null;
+
+					if (_id === null) {
+						console.error(`[IpcFlux] target not defined: ${target}`);
+						return;
+					}
+				}
+
+				if (_id === null) {
+					console.error('[IpcFlux] target passed as parameter was not BrowserWindow id or a valid ipc-flux reference id');
+					return;
+				}
+
+				webContents.fromId(_id).send(channels.call, {
+					...arg,
+					action,
+					payload,
+					target: _id
+				});
+			} else if (Process.is('renderer')) {
+				ipcRenderer.send(channels.call, {
+					...arg,
+					action,
+					payload,
+					target: _id
+				});
 			}
-
-			if (typeof action !== 'string') {
-				console.error('[IpcFlux] action not passed as parameter');
-				return;
-			}
-
-			webContents.fromId(target.webContents.id).send(channels.call, {
-				...arg,
-				action,
-				payload,
-				// send the target BrowserWindow id for callback and error handling
-				target: target.webContents.id
-			});
-		} else if (Process.is('renderer')) {
-			if (typeof target !== 'string') {
-				console.error('[IpcFlux] action not passed as parameter');
-				return;
-			}
-
-			// send a call to the main process to dispatch the action
-			ipcRenderer.send(channels.call, {
-				...arg,
-				action: target,
-				payload: action,
-				// send the current BrowserWindow id for callback and error handling
-				target: remote.getCurrentWindow().id
-			});
 		}
 	}
 
@@ -404,7 +434,6 @@ class IpcFlux {
 			// add the handler to `_actions`, passing in { dispatch, dispatchExternal } for use within the action, as well as the payload and callback
 			let res = handler({
 				dispatch: flux.dispatch,
-				dispatchExternal: flux.dispatchExternal,
 				commit: flux.commit,
 				commitExternal: flux.commitExternal,
 				state: flux.state

@@ -17,7 +17,7 @@ describe('Main', () => {
 				return 'action1';
 			});
 
-			ipcFlux.dispatch('action1').should.eventually.equal('action1').notify(done);
+			ipcFlux.dispatch('local', 'action1').should.eventually.equal('action1').notify(done);
 		});
 	});
 
@@ -32,7 +32,7 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('action1').then((data) => {
+				ipcFlux.dispatch('local', 'action1').then((data) => {
 					expect(data).to.equal('action1');
 				});
 			});
@@ -41,7 +41,7 @@ describe('Main', () => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }) => {
-							return dispatch('action2');
+							return dispatch('local', 'action2');
 						},
 						action2: () => {
 							return 'action2';
@@ -49,7 +49,7 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('action1').then((data) => {
+				ipcFlux.dispatch('local', 'action1').then((data) => {
 					expect(data).to.equal('action2');
 				});
 			});
@@ -63,7 +63,7 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('action1', 'hello').then((data) => {
+				ipcFlux.dispatch('local', 'action1', 'hello').then((data) => {
 					expect(data).to.equal('hello');
 				});
 			});
@@ -72,7 +72,7 @@ describe('Main', () => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }, payload) => {
-							return dispatch('action2', payload);
+							return dispatch('local', 'action2', payload);
 						},
 						action2: ({}, payload) => {
 							return payload;
@@ -80,7 +80,7 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('action1', 'hello').then((data) => {
+				ipcFlux.dispatch('local', 'action1', 'hello').then((data) => {
 					expect(data).to.equal('hello');
 				});
 			});
@@ -89,16 +89,16 @@ describe('Main', () => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }, payload) => {
-							return dispatch('action2', payload);
+							return dispatch('local', 'action2', payload);
 						},
 						action2: ({ dispatch }, payload) => {
-							return dispatch('action3', payload);
+							return dispatch('local', 'action3', payload);
 						},
 						action3: ({ dispatch }, payload) => {
-							return dispatch('action4', payload);
+							return dispatch('local', 'action4', payload);
 						},
 						action4: ({ dispatch }, payload) => {
-							return dispatch('action5', payload);
+							return dispatch('local', 'action5', payload);
 						},
 						action5: ({ dispatch }, payload) => {
 							return payload;
@@ -106,7 +106,7 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('action1', 'chain dispatch').then((data) => {
+				ipcFlux.dispatch('local', 'action1', 'chain dispatch').then((data) => {
 					expect(data).to.equal('chain dispatch');
 				});
 			});
@@ -127,12 +127,12 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('action1').then((data) => {
+				ipcFlux.dispatch('local', 'action1').then((data) => {
 					expect(data).to.equal('action1');
 					done();
 				});
 
-				ipcFlux.dispatch('action2').then((data) => {
+				ipcFlux.dispatch('local', 'action2').then((data) => {
 					expect(data).to.equal('action2');
 				});
 			});
