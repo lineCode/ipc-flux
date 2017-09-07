@@ -130,7 +130,13 @@ var IpcFlux = function () {
 				}
 			} else {
 				if (Process.is('main')) {
-					var _act = flux.dispatch(arg.target, arg.action, arg.payload);
+					var _target2 = arg.target;
+
+					if (typeof arg.target === 'string') {
+						_target2 = flux._instances[_target2];
+					}
+
+					var _act = flux.dispatch(_target2, arg.action, arg.payload);
 
 					if (isPromise(_act)) {
 						_act.then(function (data) {
@@ -344,19 +350,6 @@ var IpcFlux = function () {
 
 				var _id = null;
 
-				if (typeof target === 'string') {
-					if (target === 'main') {
-						_id = target;
-					} else {
-						_id = flux._instances[target] || null;
-
-						if (_id === null) {
-							console.error('[IpcFlux] target not defined: ' + target);
-							return;
-						}
-					}
-				}
-
 				if (typeof target === 'number') {
 					_id = typeof target === 'number' ? target || null : null;
 
@@ -364,6 +357,8 @@ var IpcFlux = function () {
 						console.error('[IpcFlux] target window id not valid: ' + target);
 						return;
 					}
+				} else if (typeof target === 'string') {
+					_id = target;
 				}
 
 				if (_id === null) {

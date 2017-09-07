@@ -26,6 +26,21 @@ or, using `require`
 const IpcFlux = require('ipc-flux').default;
 ```
 
+### Setting the instance id
+
+> This should ideally be set for each renderer instance.
+
+```js
+const ipcFlux = new IpcFlux({
+	id: 'ID'
+});
+```
+
+### default instance id's
+
+- Main: `main`
+- Local: `local`
+
 ### Options
 
 ```js

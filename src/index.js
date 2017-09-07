@@ -98,7 +98,13 @@ class IpcFlux {
 				}
 			} else {
 				if (Process.is('main')) {
-					const act = flux.dispatch(arg.target, arg.action, arg.payload);
+					let target = arg.target;
+
+					if (typeof arg.target === 'string') {
+						target = flux._instances[target];
+					}
+
+					const act = flux.dispatch(target, arg.action, arg.payload);
 
 					if (isPromise(act)) {
 						act.then(data => {
@@ -303,19 +309,6 @@ class IpcFlux {
 
 			let _id = null;
 
-			if (typeof target === 'string') {
-				if (target === 'main') {
-					_id = target;
-				} else {
-					_id = flux._instances[target] || null;
-
-					if (_id === null) {
-						console.error(`[IpcFlux] target not defined: ${target}`);
-						return;
-					}
-				}
-			}
-
 			if (typeof target === 'number') {
 				_id = typeof target === 'number' ? target || null : null;
 
@@ -323,6 +316,8 @@ class IpcFlux {
 					console.error(`[IpcFlux] target window id not valid: ${target}`);
 					return;
 				}
+			} else if (typeof target === 'string') {
+				_id = target;
 			}
 
 			if (_id === null) {

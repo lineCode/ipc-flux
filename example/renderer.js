@@ -1,6 +1,7 @@
 const IpcFlux = require('../build/index.js').default;
 
 const ipcFlux = new IpcFlux({
+	id: 'a',
 	actions: {
 		colorgr: () => {
 			document.getElementById('click').style.backgroundColor = 'green';
@@ -12,5 +13,5 @@ const ipcFlux = new IpcFlux({
 });
 
 document.getElementById('click').addEventListener('click', () => {
-	ipcFlux.dispatch(2, 'coloryb');
+	ipcFlux.dispatch('b', 'coloryb');
 });
