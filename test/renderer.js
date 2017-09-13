@@ -1,13 +1,14 @@
-const rendererWindowId = 2;
-
 const IpcFlux = require('../build/index.js').default;
+
+const rendererWindowId = 2;
 
 const ipcFlux = new IpcFlux({
 	actions: {
 		action1: () => {
-			return 'action1 main';
+			return 'action1 renderer';
 		},
 		action2: ({ dispatch }) => {
+			console.log(dispatch('local', 'action1'));
 			return dispatch('local', 'action1');
 		},
 		action3: ({ dispatch }) => {
@@ -43,41 +44,8 @@ const ipcFlux = new IpcFlux({
 		chainDispatch3: ({ dispatch }) => {
 			return 'chain dispatch';
 		},
-	}
-});
-
-const { app, BrowserWindow } = require('electron');
-
-let mw = null;
-
-function createWindow () {
-	mw = new BrowserWindow({
-		width: 100,
-		height: 100,
-		show: false
-	});
-
-	mw.loadURL(`file://${__dirname}/index.html`);
-
-	// mainWindows[d].webContents.openDevTools()
-
-	mw.on('closed', function () {
-		mw = null;
-	});
-}
-
-app.on('ready', () => {
-	createWindow();
-});
-
-app.on('window-all-closed', function () {
-	if (process.platform !== 'darwin') {
-		app.quit();
-	}
-});
-
-app.on('activate', function () {
-	if (mw === null) {
-		createWindow();
+		eh: ({ dispatch }) => {
+			return dispatch(rendererWindowId, 'action1');
+		}
 	}
 });

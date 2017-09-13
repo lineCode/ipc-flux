@@ -13,5 +13,5 @@ const ipcFlux = new IpcFlux({
 });
 
 document.getElementById('click').addEventListener('click', () => {
-	ipcFlux.dispatch('a', 'colorgr');
+	ipcFlux.dispatch(1, 'colorgr');
 });

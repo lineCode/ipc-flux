@@ -37,6 +37,14 @@ const removeExistingListeners = () => {
 	});
 };
 
+const checkActiveInstance = (check) => {
+	return webContents.getAllWebContents().map(contents => contents.id).indexOf(check) >= 0;
+};
+
+const genCallbackId = () => {
+	return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
 class IpcFlux {
 	constructor(options = {}) {
 		if (Process.env.type() !== 'production') {
@@ -99,16 +107,31 @@ class IpcFlux {
 			} else {
 				if (Process.is('main')) {
 					let target = arg.target;
+					const cbid = arg.cbid;
 
 					if (typeof arg.target === 'string') {
 						target = flux._instances[target];
 					}
 
-					const act = flux.dispatch(target, arg.action, arg.payload);
+					if (!checkActiveInstance(target)) {
+						return;
+					}
+
+					webContents.fromId(target).send(channels.call, {...arg});
+
+					const act = new Promise(resolve => {
+						const listener = (event, arg) => {
+							if (arg.target === target && arg.cbid === cbid) {
+								ipcMain.removeListener(channels.callback, listener);
+								resolve(arg.data);
+							}
+						};
+
+						ipcMain.on(channels.callback, listener);
+					});
 
 					if (isPromise(act)) {
 						act.then(data => {
-
 							event.sender.send(channels.callback, {
 								...arg,
 								data
@@ -122,7 +145,7 @@ class IpcFlux {
 					}
 				} else if (Process.is('renderer')) {
 					if (flux.actionExists(arg.action)) {
-						const act = dispatch.call(flux, 'local', arg.action, arg.payload);
+						const act = flux.dispatch('local', arg.action, arg.payload);
 
 						if (isPromise(act)) {
 							act.then(data => {
@@ -220,18 +243,20 @@ class IpcFlux {
 
 		emitter.on(channels.error, errorCallHandler);
 
-		const { dispatch, dispatchExternal, commit, commitExternal } = this;
+		const { dispatch, commit, commitExternal } = this;
 
 		this.dispatch = (target, type, payload) => {
 			if (target === 'local' || (!Process.is('main') && target === remote.getCurrentWindow().id)) {
 				return dispatch.call(flux, target, type, payload);
 			} else {
-				dispatch.call(flux, target, type, payload);
+				const cbID = genCallbackId();
+
+				dispatch.call(flux, target, type, payload, cbID);
 
 				return new Promise((resolve, reject) => {
 					// only resolve if the action callback is the same as that called, then remove the callback handler
 					const listener = (event, arg) => {
-						if (arg.target === target) {
+						if (arg.target === target && arg.cbid == cbID) {
 							emitter.removeListener(channels.callback, listener);
 							resolve(arg.data);
 						} else {
@@ -241,7 +266,7 @@ class IpcFlux {
 
 					// setup a callback listener
 					emitter.on(channels.callback, listener);
-				});
+				}).catch(() => {});
 			}
 		};
 
@@ -283,13 +308,14 @@ class IpcFlux {
 		return Boolean(this._mutations[mutation]);
 	}
 
-	dispatch(_target, _action, _payload) {
+	dispatch(_target, _action, _payload, _cbid) {
 		const flux = this;
 
-		const { target, action, payload } = {
+		const { target, action, payload, cbid } = {
 			target: _target,
 			action: _action,
-			payload: _payload
+			payload: _payload,
+			cbid: _cbid
 		};
 
 		if (target === 'local' || (Process.is('main') && target === 'main') || (!Process.is('main') && target === remote.getCurrentWindow().id)) {
@@ -299,6 +325,7 @@ class IpcFlux {
 				console.error(`[IpcFlux] unknown action: ${action}`);
 				return;
 			}
+
 			return entry.length > 1 ? Promise.all(entry.map(handler => handler(payload))) : entry[0](payload);
 		} else {
 			const arg = {
@@ -332,7 +359,9 @@ class IpcFlux {
 				...arg,
 				action,
 				payload,
-				target: _id
+				target: _id,
+				cbid,
+				relay: Process.is('renderer') && target !== 'main'
 			});
 		}
 	}

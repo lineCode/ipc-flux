@@ -56,6 +56,16 @@ var removeExistingListeners = function removeExistingListeners() {
 	});
 };
 
+var checkActiveInstance = function checkActiveInstance(check) {
+	return _electron.webContents.getAllWebContents().map(function (contents) {
+		return contents.id;
+	}).indexOf(check) >= 0;
+};
+
+var genCallbackId = function genCallbackId() {
+	return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
 var IpcFlux = function () {
 	function IpcFlux() {
 		var _this = this;
@@ -131,16 +141,31 @@ var IpcFlux = function () {
 			} else {
 				if (Process.is('main')) {
 					var _target2 = arg.target;
+					var cbid = arg.cbid;
 
 					if (typeof arg.target === 'string') {
 						_target2 = flux._instances[_target2];
 					}
 
-					var _act = flux.dispatch(_target2, arg.action, arg.payload);
+					if (!checkActiveInstance(_target2)) {
+						return;
+					}
+
+					_electron.webContents.fromId(_target2).send(channels.call, _extends({}, arg));
+
+					var _act = new Promise(function (resolve) {
+						var listener = function listener(event, arg) {
+							if (arg.target === _target2 && arg.cbid === cbid) {
+								_electron.ipcMain.removeListener(channels.callback, listener);
+								resolve(arg.data);
+							}
+						};
+
+						_electron.ipcMain.on(channels.callback, listener);
+					});
 
 					if (isPromise(_act)) {
 						_act.then(function (data) {
-
 							event.sender.send(channels.callback, _extends({}, arg, {
 								data: data
 							}));
@@ -151,7 +176,7 @@ var IpcFlux = function () {
 					}
 				} else if (Process.is('renderer')) {
 					if (flux.actionExists(arg.action)) {
-						var _act2 = dispatch.call(flux, 'local', arg.action, arg.payload);
+						var _act2 = flux.dispatch('local', arg.action, arg.payload);
 
 						if (isPromise(_act2)) {
 							_act2.then(function (data) {
@@ -248,7 +273,6 @@ var IpcFlux = function () {
 		emitter.on(channels.error, errorCallHandler);
 
 		var dispatch = this.dispatch,
-		    dispatchExternal = this.dispatchExternal,
 		    commit = this.commit,
 		    commitExternal = this.commitExternal;
 
@@ -257,12 +281,14 @@ var IpcFlux = function () {
 			if (target === 'local' || !Process.is('main') && target === _electron.remote.getCurrentWindow().id) {
 				return dispatch.call(flux, target, type, payload);
 			} else {
-				dispatch.call(flux, target, type, payload);
+				var cbID = genCallbackId();
+
+				dispatch.call(flux, target, type, payload, cbID);
 
 				return new Promise(function (resolve, reject) {
 					// only resolve if the action callback is the same as that called, then remove the callback handler
 					var listener = function listener(event, arg) {
-						if (arg.target === target) {
+						if (arg.target === target && arg.cbid == cbID) {
 							emitter.removeListener(channels.callback, listener);
 							resolve(arg.data);
 						} else {
@@ -272,7 +298,7 @@ var IpcFlux = function () {
 
 					// setup a callback listener
 					emitter.on(channels.callback, listener);
-				});
+				}).catch(function () {});
 			}
 		};
 
@@ -318,17 +344,19 @@ var IpcFlux = function () {
 		}
 	}, {
 		key: 'dispatch',
-		value: function dispatch(_target, _action, _payload) {
+		value: function dispatch(_target, _action, _payload, _cbid) {
 			var flux = this;
 
 			var _target$action$payloa = {
 				target: _target,
 				action: _action,
-				payload: _payload
+				payload: _payload,
+				cbid: _cbid
 			},
 			    target = _target$action$payloa.target,
 			    action = _target$action$payloa.action,
-			    payload = _target$action$payloa.payload;
+			    payload = _target$action$payloa.payload,
+			    cbid = _target$action$payloa.cbid;
 
 
 			if (target === 'local' || Process.is('main') && target === 'main' || !Process.is('main') && target === _electron.remote.getCurrentWindow().id) {
@@ -338,6 +366,7 @@ var IpcFlux = function () {
 					console.error('[IpcFlux] unknown action: ' + action);
 					return;
 				}
+
 				return entry.length > 1 ? Promise.all(entry.map(function (handler) {
 					return handler(payload);
 				})) : entry[0](payload);
@@ -371,7 +400,9 @@ var IpcFlux = function () {
 				emitter.send(channels.call, _extends({}, arg, {
 					action: action,
 					payload: payload,
-					target: _id
+					target: _id,
+					cbid: cbid,
+					relay: Process.is('renderer') && target !== 'main'
 				}));
 			}
 		}
