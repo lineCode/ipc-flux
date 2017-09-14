@@ -121,9 +121,9 @@ var IpcFlux = function () {
 
 		// the listener to be called for actions
 		var actionRouteHandler = function actionRouteHandler(event, arg) {
-			if (arg.target === 'main') {
+			if (arg.target === 'main' || Process.is('renderer')) {
 				if (flux.actionExists(arg.action)) {
-					var act = dispatch.call(flux, arg.target, arg.action, arg.payload);
+					var act = Process.is('renderer') ? flux.dispatch('local', arg.action, arg.payload) : dispatch.call(flux, arg.target, arg.action, arg.payload);
 
 					if (isPromise(act)) {
 						act.then(function (data) {
@@ -139,59 +139,35 @@ var IpcFlux = function () {
 					}
 				}
 			} else {
-				if (Process.is('main')) {
-					var _target2 = arg.target;
-					var cbid = arg.cbid;
+				var _target2 = arg.target;
+				var cbid = arg.cbid;
 
-					if (typeof arg.target === 'string') {
-						_target2 = flux._instances[_target2];
-					}
-
-					if (!checkActiveInstance(_target2)) {
-						return;
-					}
-
-					_electron.webContents.fromId(_target2).send(channels.call, _extends({}, arg));
-
-					var _act = new Promise(function (resolve) {
-						var listener = function listener(event, arg) {
-							if (arg.target === _target2 && arg.cbid === cbid) {
-								_electron.ipcMain.removeListener(channels.callback, listener);
-								resolve(arg.data);
-							}
-						};
-
-						_electron.ipcMain.on(channels.callback, listener);
-					});
-
-					if (isPromise(_act)) {
-						_act.then(function (data) {
-							event.sender.send(channels.callback, _extends({}, arg, {
-								data: data
-							}));
-						});
-					} else {
-						event.sender.send(channels.error, '[IpcFlux] \'' + arg.action + '\' action called from ' + arg.process + ' process, in ' + Process.type() + ' process, did not return a Promise');
-						event.sender.send(channels.callback, _extends({}, arg));
-					}
-				} else if (Process.is('renderer')) {
-					if (flux.actionExists(arg.action)) {
-						var _act2 = flux.dispatch('local', arg.action, arg.payload);
-
-						if (isPromise(_act2)) {
-							_act2.then(function (data) {
-								event.sender.send(channels.callback, _extends({}, arg, {
-									data: data
-								}));
-							});
-						} else {
-							event.sender.send(channels.error, '[IpcFlux] \'' + arg.action + '\' action called from ' + arg.process + ' process, in ' + Process.type() + ' process, did not return a Promise');
-							event.sender.send(channels.callback, _extends({}, arg, {
-								target: target
-							}));
-						}
-					}
+				if (typeof arg.target === 'string') {
+					_target2 = flux._instances[_target2];
 				}
+
+				if (!checkActiveInstance(_target2)) {
+					return;
+				}
+
+				_electron.webContents.fromId(_target2).send(channels.call, _extends({}, arg));
+
+				var _act = new Promise(function (resolve) {
+					var listener = function listener(event, arg) {
+						if (arg.target === _target2 && arg.cbid === cbid) {
+							_electron.ipcMain.removeListener(channels.callback, listener);
+							resolve(arg.data);
+						}
+					};
+
+					_electron.ipcMain.on(channels.callback, listener);
+				});
+
+				_act.then(function (data) {
+					event.sender.send(channels.callback, _extends({}, arg, {
+						data: data
+					}));
+				});
 			}
 		};
 

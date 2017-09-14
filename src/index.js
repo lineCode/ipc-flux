@@ -85,9 +85,9 @@ class IpcFlux {
 
 		// the listener to be called for actions
 		const actionRouteHandler = (event, arg) => {
-			if (arg.target === 'main') {
+			if (arg.target === 'main' || Process.is('renderer')) {
 				if (flux.actionExists(arg.action)) {
-					const act = dispatch.call(flux, arg.target, arg.action, arg.payload);
+					const act = Process.is('renderer') ? flux.dispatch('local', arg.action, arg.payload) : dispatch.call(flux, arg.target, arg.action, arg.payload);
 
 					if (isPromise(act)) {
 						act.then(data => {
@@ -105,64 +105,36 @@ class IpcFlux {
 					}
 				}
 			} else {
-				if (Process.is('main')) {
-					let target = arg.target;
-					const cbid = arg.cbid;
+				let target = arg.target;
+				const cbid = arg.cbid;
 
-					if (typeof arg.target === 'string') {
-						target = flux._instances[target];
-					}
-
-					if (!checkActiveInstance(target)) {
-						return;
-					}
-
-					webContents.fromId(target).send(channels.call, {...arg});
-
-					const act = new Promise(resolve => {
-						const listener = (event, arg) => {
-							if (arg.target === target && arg.cbid === cbid) {
-								ipcMain.removeListener(channels.callback, listener);
-								resolve(arg.data);
-							}
-						};
-
-						ipcMain.on(channels.callback, listener);
-					});
-
-					if (isPromise(act)) {
-						act.then(data => {
-							event.sender.send(channels.callback, {
-								...arg,
-								data
-							});
-						});
-					} else {
-						event.sender.send(channels.error, `[IpcFlux] '${arg.action}' action called from ${arg.process} process, in ${Process.type()} process, did not return a Promise`);
-						event.sender.send(channels.callback, {
-							...arg
-						});
-					}
-				} else if (Process.is('renderer')) {
-					if (flux.actionExists(arg.action)) {
-						const act = flux.dispatch('local', arg.action, arg.payload);
-
-						if (isPromise(act)) {
-							act.then(data => {
-								event.sender.send(channels.callback, {
-									...arg,
-									data
-								});
-							});
-						} else {
-							event.sender.send(channels.error, `[IpcFlux] '${arg.action}' action called from ${arg.process} process, in ${Process.type()} process, did not return a Promise`);
-							event.sender.send(channels.callback, {
-								...arg,
-								target
-							});
-						}
-					}
+				if (typeof arg.target === 'string') {
+					target = flux._instances[target];
 				}
+
+				if (!checkActiveInstance(target)) {
+					return;
+				}
+
+				webContents.fromId(target).send(channels.call, {...arg});
+
+				const act = new Promise(resolve => {
+					const listener = (event, arg) => {
+						if (arg.target === target && arg.cbid === cbid) {
+							ipcMain.removeListener(channels.callback, listener);
+							resolve(arg.data);
+						}
+					};
+
+					ipcMain.on(channels.callback, listener);
+				});
+
+				act.then(data => {
+					event.sender.send(channels.callback, {
+						...arg,
+						data
+					});
+				});
 			}
 		};
 
