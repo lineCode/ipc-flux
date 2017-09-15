@@ -5,9 +5,6 @@
 [![npm](https://img.shields.io/npm/v/ipc-flux.svg?style=flat-square)](https://www.npmjs.com/package/ipc-flux)
 [![npm](https://img.shields.io/npm/dt/ipc-flux.svg?style=flat-square)](https://www.npmjs.com/package/ipc-flux)
 
-
-## NOTE: `ipc-flux` is currently undergoing MAJOR development with significant changes. Documentation may not be correct, and or up to date.
-
 ### installation
 ```bash
 $ npm i ipc-flux -S
@@ -78,7 +75,7 @@ or, register actions as required
 ```js
 const ipcFlux = new IpcFlux();
 
-ipcFlux.registerAction('ACTION_NAME', ({ dispatch }, payload) => {
+ipcFlux.registerAction('ACTION_ NAME', ({ dispatch }, payload) => {
 	...
 });
 ```
