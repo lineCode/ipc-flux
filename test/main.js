@@ -59,8 +59,6 @@ function createWindow () {
 
 	mw.loadURL(`file://${__dirname}/index.html`);
 
-	// mainWindows[d].webContents.openDevTools()
-
 	mw.on('closed', function () {
 		mw = null;
 	});

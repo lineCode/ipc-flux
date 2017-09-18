@@ -83,84 +83,78 @@ class IpcFlux {
 			...config
 		};
 
-		// the listener to be called for actions
-		const actionRouteHandler = (event, arg) => {
-			if (arg.target === 'main' || Process.is('renderer')) {
-				if (flux.actionExists(arg.action)) {
-					const act = Process.is('renderer') ? flux.dispatch('local', arg.action, arg.payload) : dispatch.call(flux, arg.target, arg.action, arg.payload);
+		const eventHandlers = {
+			action: (event, arg) => {
+				if (arg.target === 'main' || Process.is('renderer')) {
+					if (flux.actionExists(arg.action)) {
+						const act = Process.is('renderer') ? flux.dispatch('local', arg.action, arg.payload) : dispatch.call(flux, arg.target, arg.action, arg.payload);
 
-					if (isPromise(act)) {
-						act.then(data => {
+						if (isPromise(act)) {
+							act.then(data => {
+								event.sender.send(channels.callback, {
+									...arg,
+									data
+								});
+							});
+						} else {
+							event.sender.send(channels.error, `[IpcFlux] '${arg.action}' action called from ${arg.process} process, in ${Process.type()} process, did not return a Promise`);
 							event.sender.send(channels.callback, {
 								...arg,
-								data
+								target
 							});
-						});
-					} else {
-						event.sender.send(channels.error, `[IpcFlux] '${arg.action}' action called from ${arg.process} process, in ${Process.type()} process, did not return a Promise`);
+						}
+					}
+				} else {
+					const target = typeof arg.target === 'string' ? flux._instances[arg.target] : arg.target;
+					const cbid = arg.callback;
+
+					if (!checkActiveInstance(target)) {
+						return;
+					}
+
+					webContents.fromId(target).send(channels.call, {...arg});
+
+					const act = new Promise(resolve => {
+						const listener = (event, arg) => {
+							if (arg.target === target && arg.callback === cbid) {
+								ipcMain.removeListener(channels.callback, listener);
+								resolve(arg.data);
+							}
+						};
+
+						ipcMain.on(channels.callback, listener);
+					});
+
+					act.then(data => {
 						event.sender.send(channels.callback, {
 							...arg,
-							target
+							data
 						});
-					}
-				}
-			} else {
-				let target = arg.target;
-				const cbid = arg.cbid;
-
-				if (typeof arg.target === 'string') {
-					target = flux._instances[target];
-				}
-
-				if (!checkActiveInstance(target)) {
-					return;
-				}
-
-				webContents.fromId(target).send(channels.call, {...arg});
-
-				const act = new Promise(resolve => {
-					const listener = (event, arg) => {
-						if (arg.target === target && arg.cbid === cbid) {
-							ipcMain.removeListener(channels.callback, listener);
-							resolve(arg.data);
-						}
-					};
-
-					ipcMain.on(channels.callback, listener);
-				});
-
-				act.then(data => {
-					event.sender.send(channels.callback, {
-						...arg,
-						data
 					});
-				});
-			}
-		};
-
-		// the listener to be called for mutations
-		const mutationRouteHandler = (event, arg) => {
-			if (flux.mutationExists(arg.mutation)) {
-				commit.call(flux, arg.mutation, arg.payload);
+				}
+			},
+			mutation: (event, arg) => {
+				if (flux.mutationExists(arg.mutation)) {
+					commit.call(flux, arg.mutation, arg.payload);
+				}
 			}
 		};
 
 		// because a single channel (`channel.call`) is used for all callers, route different calls to their required handler
-		const routeCall = (event, arg) => {
+		const callHandler = (event, arg) => {
 			if (typeof arg !== 'object') {
 				return;
 			}
 
 			switch (arg.callType) {
-			// if the call type is an action, let `actionEmitHandler` handle it
-			case 'action':
-				actionRouteHandler(event, arg);
-				break;
-			case 'mutation':
-				mutationRouteHandler(event, arg);
-				break;
-			default:
-				break;
+				case 'action':
+					eventHandlers.action(event, arg);
+					break;
+				case 'mutation':
+					eventHandlers.mutation(event, arg);
+					break;
+				default:
+					break;
 			}
 		};
 
@@ -168,45 +162,47 @@ class IpcFlux {
 		const emitter = Process.is('main') ? ipcMain : ipcRenderer;
 		emitter.setMaxListeners(this._config.maxListeners);
 
-		if (Process.is('main')) {
-			emitter.on(channels.processes, (event, arg) => {
-				if (arg.uid === 'main' || arg.uid === 'local') {
-					event.sender.send(channels.error, `[IpcFlux] instance id cannot be 'main' or 'local' (BrowserWindow: ${arg.id})`);
-				} else if (flux._instances[arg.uid]) {
-					event.sender.send(channels.error, `[IpcFlux] instance id '${arg.uid}' already defined (BrowserWindow: ${arg.id})`);
-				} else {
-					flux._instances[arg.uid] = arg.id;
-				}
-			});
-		}
+		const defineInstances = () => {
+			if (Process.is('main')) {
+				ipcMain.on(channels.processes, (event, arg) => {
+					if (arg.uid === 'main' || arg.uid === 'local') {
+						event.sender.send(channels.error, `[IpcFlux] instance id cannot be 'main' or 'local' (BrowserWindow: ${arg.id})`);
+					} else if (flux._instances[arg.uid]) {
+						event.sender.send(channels.error, `[IpcFlux] instance id '${arg.uid}' already defined (BrowserWindow: ${arg.id})`);
+					} else {
+						flux._instances[arg.uid] = arg.id;
+					}
+				});
+			} else {
+				ipcRenderer.send(channels.processes, {
+					uid: flux._id,
+					id: remote.getCurrentWindow().id || null
+				});
+			}
+		};
 
-		if (Process.is('renderer')) {
-			emitter.send(channels.processes, {
-				uid: flux._id,
-				id: remote.getCurrentWindow().id
-			});
-		}
+		defineInstances();
 
 		// the emitter event handlers for calls and errors
-		emitter.on(channels.call, routeCall);
+		emitter.on(channels.call, callHandler);
 
 		const errorCallHandler = (event, err) => {
 			if (typeof err === 'object') {
 				switch (err.type) {
-				case 'throw':
-					throw new Error(err.message);
-				case 'warn':
-					console.warn(err.message);
-					break;
-				case 'warning':
-					console.warn(err.message);
-					break;
-				case 'log':
-					console.log(err.message);
-					break;
-				default:
-					console.error(err.message);
-					break;
+					case 'throw':
+						throw new Error(err.message);
+					case 'warn':
+						console.warn(err.message);
+						break;
+					case 'warning':
+						console.warn(err.message);
+						break;
+					case 'log':
+						console.log(err.message);
+						break;
+					default:
+						console.error(err.message);
+						break;
 				}
 			} else {
 				console.error(err);
@@ -221,24 +217,22 @@ class IpcFlux {
 			if (target === 'local' || (!Process.is('main') && target === remote.getCurrentWindow().id)) {
 				return dispatch.call(flux, target, type, payload);
 			} else {
-				const cbID = genCallbackId();
+				const cbid = genCallbackId();
 
-				dispatch.call(flux, target, type, payload, cbID);
+				dispatch.call(flux, target, type, payload, cbid);
 
-				return new Promise((resolve, reject) => {
+				return new Promise((resolve) => {
 					// only resolve if the action callback is the same as that called, then remove the callback handler
 					const listener = (event, arg) => {
-						if (arg.target === target && arg.cbid == cbID) {
+						if (arg.target === target && arg.callback == cbid) {
 							emitter.removeListener(channels.callback, listener);
 							resolve(arg.data);
-						} else {
-							reject();
 						}
 					};
 
 					// setup a callback listener
 					emitter.on(channels.callback, listener);
-				}).catch(() => {});
+				});
 			}
 		};
 
@@ -306,34 +300,25 @@ class IpcFlux {
 				callType: 'action'
 			};
 
-			let _id = null;
-
-			if (typeof target === 'number') {
-				_id = typeof target === 'number' ? target || null : null;
-
-				if (_id === null) {
-					console.error(`[IpcFlux] target window id not valid: ${target}`);
-					return;
-				}
-			} else if (typeof target === 'string') {
-				_id = target;
-			}
+			let _id = (typeof target === 'number' ? target : typeof target === 'string' ? target : null) || null;
 
 			if (_id === null) {
 				console.error('[IpcFlux] target passed as parameter was not BrowserWindow id or a valid ipc-flux reference id');
 				return;
 			}
 
+			if (!Process.is('renderer') && !checkActiveInstance(_id)) {
+				return;
+			}
 
-			const emitter = Process.is('main') ? webContents.fromId(_id) : ipcRenderer;
+			const emitter = Process.is('main') ? webContents.fromId(_id).webContents : ipcRenderer;
 
 			emitter.send(channels.call, {
 				...arg,
 				action,
 				payload,
 				target: _id,
-				cbid,
-				relay: Process.is('renderer') && target !== 'main'
+				callback: cbid
 			});
 		}
 	}
@@ -402,7 +387,6 @@ class IpcFlux {
 				mutation,
 				payload,
 				options,
-				// send the target BrowserWindow id for callback and error handling
 				target: target.webContents.id
 			});
 		} else if (Process.is('renderer')) {
@@ -417,7 +401,6 @@ class IpcFlux {
 				mutation: target,
 				payload: mutation,
 				options: payload,
-				// send the current BrowserWindow id for callback and error handling
 				target: remote.getCurrentWindow().id
 			});
 		}
@@ -453,6 +436,7 @@ class IpcFlux {
 		const flux = this;
 
 		const entry = Array.isArray(flux._mutations[mutation]) ? flux._mutations[mutation] : flux._mutations[mutation] = [];
+
 		entry.push((payload) => {
 			handler.call(flux, flux.state, payload);
 		});

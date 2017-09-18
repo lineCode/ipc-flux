@@ -119,78 +119,72 @@ var IpcFlux = function () {
 			debug: false
 		}, config);
 
-		// the listener to be called for actions
-		var actionRouteHandler = function actionRouteHandler(event, arg) {
-			if (arg.target === 'main' || Process.is('renderer')) {
-				if (flux.actionExists(arg.action)) {
-					var act = Process.is('renderer') ? flux.dispatch('local', arg.action, arg.payload) : dispatch.call(flux, arg.target, arg.action, arg.payload);
+		var eventHandlers = {
+			action: function action(event, arg) {
+				if (arg.target === 'main' || Process.is('renderer')) {
+					if (flux.actionExists(arg.action)) {
+						var act = Process.is('renderer') ? flux.dispatch('local', arg.action, arg.payload) : dispatch.call(flux, arg.target, arg.action, arg.payload);
 
-					if (isPromise(act)) {
-						act.then(function (data) {
+						if (isPromise(act)) {
+							act.then(function (data) {
+								event.sender.send(channels.callback, _extends({}, arg, {
+									data: data
+								}));
+							});
+						} else {
+							event.sender.send(channels.error, '[IpcFlux] \'' + arg.action + '\' action called from ' + arg.process + ' process, in ' + Process.type() + ' process, did not return a Promise');
 							event.sender.send(channels.callback, _extends({}, arg, {
-								data: data
+								target: target
 							}));
-						});
-					} else {
-						event.sender.send(channels.error, '[IpcFlux] \'' + arg.action + '\' action called from ' + arg.process + ' process, in ' + Process.type() + ' process, did not return a Promise');
-						event.sender.send(channels.callback, _extends({}, arg, {
-							target: target
-						}));
-					}
-				}
-			} else {
-				var _target2 = arg.target;
-				var cbid = arg.cbid;
-
-				if (typeof arg.target === 'string') {
-					_target2 = flux._instances[_target2];
-				}
-
-				if (!checkActiveInstance(_target2)) {
-					return;
-				}
-
-				_electron.webContents.fromId(_target2).send(channels.call, _extends({}, arg));
-
-				var _act = new Promise(function (resolve) {
-					var listener = function listener(event, arg) {
-						if (arg.target === _target2 && arg.cbid === cbid) {
-							_electron.ipcMain.removeListener(channels.callback, listener);
-							resolve(arg.data);
 						}
-					};
+					}
+				} else {
+					var _target2 = typeof arg.target === 'string' ? flux._instances[arg.target] : arg.target;
+					var cbid = arg.callback;
 
-					_electron.ipcMain.on(channels.callback, listener);
-				});
+					if (!checkActiveInstance(_target2)) {
+						return;
+					}
 
-				_act.then(function (data) {
-					event.sender.send(channels.callback, _extends({}, arg, {
-						data: data
-					}));
-				});
-			}
-		};
+					_electron.webContents.fromId(_target2).send(channels.call, _extends({}, arg));
 
-		// the listener to be called for mutations
-		var mutationRouteHandler = function mutationRouteHandler(event, arg) {
-			if (flux.mutationExists(arg.mutation)) {
-				commit.call(flux, arg.mutation, arg.payload);
+					var _act = new Promise(function (resolve) {
+						var listener = function listener(event, arg) {
+							if (arg.target === _target2 && arg.callback === cbid) {
+								_electron.ipcMain.removeListener(channels.callback, listener);
+								resolve(arg.data);
+							}
+						};
+
+						_electron.ipcMain.on(channels.callback, listener);
+					});
+
+					_act.then(function (data) {
+						event.sender.send(channels.callback, _extends({}, arg, {
+							data: data
+						}));
+					});
+				}
+			},
+			mutation: function mutation(event, arg) {
+				if (flux.mutationExists(arg.mutation)) {
+					commit.call(flux, arg.mutation, arg.payload);
+				}
 			}
 		};
 
 		// because a single channel (`channel.call`) is used for all callers, route different calls to their required handler
-		var routeCall = function routeCall(event, arg) {
+		var callHandler = function callHandler(event, arg) {
 			if ((typeof arg === 'undefined' ? 'undefined' : _typeof(arg)) !== 'object') {
 				return;
 			}
 
 			switch (arg.callType) {
-				// if the call type is an action, let `actionEmitHandler` handle it
 				case 'action':
-					actionRouteHandler(event, arg);
+					eventHandlers.action(event, arg);
 					break;
 				case 'mutation':
-					mutationRouteHandler(event, arg);
+					eventHandlers.mutation(event, arg);
 					break;
 				default:
 					break;
@@ -201,27 +195,29 @@ var IpcFlux = function () {
 		var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
 		emitter.setMaxListeners(this._config.maxListeners);
 
-		if (Process.is('main')) {
-			emitter.on(channels.processes, function (event, arg) {
-				if (arg.uid === 'main' || arg.uid === 'local') {
-					event.sender.send(channels.error, '[IpcFlux] instance id cannot be \'main\' or \'local\' (BrowserWindow: ' + arg.id + ')');
-				} else if (flux._instances[arg.uid]) {
-					event.sender.send(channels.error, '[IpcFlux] instance id \'' + arg.uid + '\' already defined (BrowserWindow: ' + arg.id + ')');
-				} else {
-					flux._instances[arg.uid] = arg.id;
-				}
-			});
-		}
+		var defineInstances = function defineInstances() {
+			if (Process.is('main')) {
+				_electron.ipcMain.on(channels.processes, function (event, arg) {
+					if (arg.uid === 'main' || arg.uid === 'local') {
+						event.sender.send(channels.error, '[IpcFlux] instance id cannot be \'main\' or \'local\' (BrowserWindow: ' + arg.id + ')');
+					} else if (flux._instances[arg.uid]) {
+						event.sender.send(channels.error, '[IpcFlux] instance id \'' + arg.uid + '\' already defined (BrowserWindow: ' + arg.id + ')');
+					} else {
+						flux._instances[arg.uid] = arg.id;
+					}
+				});
+			} else {
+				_electron.ipcRenderer.send(channels.processes, {
+					uid: flux._id,
+					id: _electron.remote.getCurrentWindow().id || null
+				});
+			}
+		};
 
-		if (Process.is('renderer')) {
-			emitter.send(channels.processes, {
-				uid: flux._id,
-				id: _electron.remote.getCurrentWindow().id
-			});
-		}
+		defineInstances();
 
 		// the emitter event handlers for calls and errors
-		emitter.on(channels.call, routeCall);
+		emitter.on(channels.call, callHandler);
 
 		var errorCallHandler = function errorCallHandler(event, err) {
 			if ((typeof err === 'undefined' ? 'undefined' : _typeof(err)) === 'object') {
@@ -257,24 +253,22 @@ var IpcFlux = function () {
 			if (target === 'local' || !Process.is('main') && target === _electron.remote.getCurrentWindow().id) {
 				return dispatch.call(flux, target, type, payload);
 			} else {
-				var cbID = genCallbackId();
+				var cbid = genCallbackId();
 
-				dispatch.call(flux, target, type, payload, cbID);
+				dispatch.call(flux, target, type, payload, cbid);
 
-				return new Promise(function (resolve, reject) {
+				return new Promise(function (resolve) {
 					// only resolve if the action callback is the same as that called, then remove the callback handler
 					var listener = function listener(event, arg) {
-						if (arg.target === target && arg.cbid == cbID) {
+						if (arg.target === target && arg.callback == cbid) {
 							emitter.removeListener(channels.callback, listener);
 							resolve(arg.data);
-						} else {
-							reject();
 						}
 					};
 
 					// setup a callback listener
 					emitter.on(channels.callback, listener);
-				}).catch(function () {});
+				});
 			}
 		};
 
@@ -353,32 +347,24 @@ var IpcFlux = function () {
 					callType: 'action'
 				};
 
-				var _id = null;
-
-				if (typeof target === 'number') {
-					_id = typeof target === 'number' ? target || null : null;
-
-					if (_id === null) {
-						console.error('[IpcFlux] target window id not valid: ' + target);
-						return;
-					}
-				} else if (typeof target === 'string') {
-					_id = target;
-				}
+				var _id = (typeof target === 'number' ? target : typeof target === 'string' ? target : null) || null;
 
 				if (_id === null) {
 					console.error('[IpcFlux] target passed as parameter was not BrowserWindow id or a valid ipc-flux reference id');
 					return;
 				}
 
-				var emitter = Process.is('main') ? _electron.webContents.fromId(_id) : _electron.ipcRenderer;
+				if (!Process.is('renderer') && !checkActiveInstance(_id)) {
+					return;
+				}
+
+				var emitter = Process.is('main') ? _electron.webContents.fromId(_id).webContents : _electron.ipcRenderer;
 
 				emitter.send(channels.call, _extends({}, arg, {
 					action: action,
 					payload: payload,
 					target: _id,
-					cbid: cbid,
-					relay: Process.is('renderer') && target !== 'main'
+					callback: cbid
 				}));
 			}
 		}
@@ -461,7 +447,6 @@ var IpcFlux = function () {
 					mutation: mutation,
 					payload: payload,
 					options: options,
-					// send the target BrowserWindow id for callback and error handling
 					target: target.webContents.id
 				}));
 			} else if (Process.is('renderer')) {
@@ -475,7 +460,6 @@ var IpcFlux = function () {
 					mutation: target,
 					payload: mutation,
 					options: payload,
-					// send the current BrowserWindow id for callback and error handling
 					target: _electron.remote.getCurrentWindow().id
 				}));
 			}
@@ -513,6 +497,7 @@ var IpcFlux = function () {
 			var flux = this;
 
 			var entry = Array.isArray(flux._mutations[mutation]) ? flux._mutations[mutation] : flux._mutations[mutation] = [];
+
 			entry.push(function (payload) {
 				handler.call(flux, flux.state, payload);
 			});

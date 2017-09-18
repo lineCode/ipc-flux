@@ -8,7 +8,6 @@ const ipcFlux = new IpcFlux({
 			return 'action1 renderer';
 		},
 		action2: ({ dispatch }) => {
-			console.log(dispatch('local', 'action1'));
 			return dispatch('local', 'action1');
 		},
 		action3: ({ dispatch }) => {

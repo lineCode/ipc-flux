@@ -135,200 +135,198 @@ describe('Renderer', () => {
 			});
 		});
 
-		describe('external', () => {
-			describe('renderer --> main', () => {
-				it('dispatch', (done) => {
-					const ipcFlux = new IpcFlux();
-					ipcFlux.dispatch('main', 'action1').should.eventually.equal('action1 main').notify(done);
-				});
-
-				it('dispatch ({ dispatch })', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: () => {
-								return 'action1 renderer';
-							}
-						}
-					});
-
-					ipcFlux.dispatch('main', 'action2').should.eventually.equal('action1 main').notify(done);
-				});
-
-				it('dispatch ({ dispatch })', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: () => {
-								return 'action1 renderer';
-							}
-						}
-					});
-
-					ipcFlux.dispatch('main', 'action3').should.eventually.equal('action1 renderer').notify(done);
-				});
-
-				it('dispatch ({ dispatch }, payload)', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: () => {
-								return 'action1 renderer';
-							}
-						}
-					});
-
-					ipcFlux.dispatch('main', 'action4', 'payload').should.eventually.equal('payload').notify(done);
-				});
-
-				it('dispatch ({ dispatch }, payload)', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({}, payload) => {
-								return payload;
-							}
-						}
-					});
-
-					ipcFlux.dispatch('main', 'action5', 'payload').should.eventually.equal('payload').notify(done);
-				});
-
-				it('dispatch ({ dispatch }, payload)', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({}, payload) => {
-								return payload;
-							}
-						}
-					});
-
-					ipcFlux.dispatch('main', 'action6', 'payload').should.eventually.equal('payloadpayload').notify(done);
-				});
-
-				it('dispatch (chain)', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({}, payload) => {
-								return payload;
-							}
-						}
-					});
-
-					ipcFlux.dispatch('main', 'chainDispatch').should.eventually.equal('chain dispatch').notify(done);
-				});
-
-				it('dispatch simultaneous', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({ dispatch }) => {
-								return new Promise((resolve) => {
-									setTimeout(() => {
-										resolve(dispatch('main', 'chainDispatch'));
-									}, 100);
-								});
-							},
-							action2: ({ dispatch }) => {
-								return dispatch('main', 'action1');
-							}
-						}
-					});
-
-					ipcFlux.dispatch('local', 'action1').should.eventually.equal('chain dispatch').notify(done);
-
-					ipcFlux.dispatch('local', 'action2').should.eventually.equal('action1 main');
-				});
+		describe('renderer --> main', () => {
+			it('dispatch', (done) => {
+				const ipcFlux = new IpcFlux();
+				ipcFlux.dispatch('main', 'action1').should.eventually.equal('action1 main').notify(done);
 			});
 
-			describe('renderer --> renderer', () => {
-				it('dispatch', (done) => {
-					const ipcFlux = new IpcFlux();
-
-					ipcFlux.dispatch(1, 'action1').should.eventually.equal('action1 renderer').notify(done);
-				});
-
-				it('dispatch ({ dispatch })', (done) => {
-					const ipcFlux = new IpcFlux();
-
-					ipcFlux.dispatch(1, 'action2').should.eventually.equal('action1 renderer').notify(done);
-				});
-
-				it('dispatch ({ dispatch })', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: () => {
-								return 'action1 renderer';
-							}
+			it('dispatch ({ dispatch })', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: () => {
+							return 'action1 renderer';
 						}
-					});
-
-					ipcFlux.dispatch(1, 'action3').should.eventually.equal('action1 renderer').notify(done);
+					}
 				});
 
-				it('dispatch ({ dispatch }, payload)', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({}, payload) => {
-								return payload;
-							}
+				ipcFlux.dispatch('main', 'action2').should.eventually.equal('action1 main').notify(done);
+			});
+
+			it('dispatch ({ dispatch })', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: () => {
+							return 'action1 renderer';
 						}
-					});
-
-					ipcFlux.dispatch(1, 'action4', 'payload').should.eventually.equal('payload').notify(done);
+					}
 				});
 
-				it('dispatch ({ dispatch }, payload)', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({}, payload) => {
-								return payload;
-							}
+				ipcFlux.dispatch('main', 'action3').should.eventually.equal('action1 renderer').notify(done);
+			});
+
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: () => {
+							return 'action1 renderer';
 						}
-					});
-
-					ipcFlux.dispatch(1, 'action5', 'payload').should.eventually.equal('payload').notify(done);
+					}
 				});
 
-				it('dispatch ({ dispatch }, payload)', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({}, payload) => {
-								return payload;
-							}
+				ipcFlux.dispatch('main', 'action4', 'payload').should.eventually.equal('payload').notify(done);
+			});
+
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
 						}
-					});
-
-					ipcFlux.dispatch(1, 'action6', 'payload').should.eventually.equal('payloadpayload').notify(done);
+					}
 				});
 
-				it('dispatch (chain)', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({}, payload) => {
-								return payload;
-							}
+				ipcFlux.dispatch('main', 'action5', 'payload').should.eventually.equal('payload').notify(done);
+			});
+
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
 						}
-					});
-
-					ipcFlux.dispatch(1, 'chainDispatch').should.eventually.equal('chain dispatch').notify(done);
+					}
 				});
 
-				it('dispatch simultaneous', (done) => {
-					const ipcFlux = new IpcFlux({
-						actions: {
-							action1: ({ dispatch }) => {
-								return new Promise((resolve) => {
-									setTimeout(() => {
-										resolve(dispatch(1, 'chainDispatch'));
-									}, 100);
-								});
-							},
-							action2: ({ dispatch }) => {
-								return dispatch(1, 'action1');
-							}
+				ipcFlux.dispatch('main', 'action6', 'payload').should.eventually.equal('payloadpayload').notify(done);
+			});
+
+			it('dispatch (chain)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
 						}
-					});
-
-					ipcFlux.dispatch('local', 'action1').should.eventually.equal('chain dispatch').notify(done);
-
-					ipcFlux.dispatch('local', 'action2').should.eventually.equal('action1 renderer');
+					}
 				});
+
+				ipcFlux.dispatch('main', 'chainDispatch').should.eventually.equal('chain dispatch').notify(done);
+			});
+
+			it('dispatch simultaneous', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({ dispatch }) => {
+							return new Promise((resolve) => {
+								setTimeout(() => {
+									resolve(dispatch('main', 'chainDispatch'));
+								}, 100);
+							});
+						},
+						action2: ({ dispatch }) => {
+							return dispatch('main', 'action1');
+						}
+					}
+				});
+
+				ipcFlux.dispatch('local', 'action1').should.eventually.equal('chain dispatch').notify(done);
+
+				ipcFlux.dispatch('local', 'action2').should.eventually.equal('action1 main');
+			});
+		});
+
+		describe('renderer --> renderer', () => {
+			it('dispatch', (done) => {
+				const ipcFlux = new IpcFlux();
+
+				ipcFlux.dispatch(1, 'action1').should.eventually.equal('action1 renderer').notify(done);
+			});
+
+			it('dispatch ({ dispatch })', (done) => {
+				const ipcFlux = new IpcFlux();
+
+				ipcFlux.dispatch(1, 'action2').should.eventually.equal('action1 renderer').notify(done);
+			});
+
+			it('dispatch ({ dispatch })', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: () => {
+							return 'action1 renderer';
+						}
+					}
+				});
+
+				ipcFlux.dispatch(1, 'action3').should.eventually.equal('action1 renderer').notify(done);
+			});
+
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
+						}
+					}
+				});
+
+				ipcFlux.dispatch(1, 'action4', 'payload').should.eventually.equal('payload').notify(done);
+			});
+
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
+						}
+					}
+				});
+
+				ipcFlux.dispatch(1, 'action5', 'payload').should.eventually.equal('payload').notify(done);
+			});
+
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
+						}
+					}
+				});
+
+				ipcFlux.dispatch(1, 'action6', 'payload').should.eventually.equal('payloadpayload').notify(done);
+			});
+
+			it('dispatch (chain)', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({}, payload) => {
+							return payload;
+						}
+					}
+				});
+
+				ipcFlux.dispatch(1, 'chainDispatch').should.eventually.equal('chain dispatch').notify(done);
+			});
+
+			it('dispatch simultaneous', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({ dispatch }) => {
+							return new Promise((resolve) => {
+								setTimeout(() => {
+									resolve(dispatch(1, 'chainDispatch'));
+								}, 100);
+							});
+						},
+						action2: ({ dispatch }) => {
+							return dispatch(1, 'action1');
+						}
+					}
+				});
+
+				ipcFlux.dispatch('local', 'action1').should.eventually.equal('chain dispatch').notify(done);
+
+				ipcFlux.dispatch('local', 'action2').should.eventually.equal('action1 renderer');
 			});
 		});
 	});
