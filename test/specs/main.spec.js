@@ -23,7 +23,7 @@ describe('Main', () => {
 
 	describe('dispatch', () => {
 		describe('local', () => {
-			it('dispatch', () => {
+			it('dispatch', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: () => {
@@ -32,12 +32,10 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('local', 'action1').then((data) => {
-					expect(data).to.equal('action1');
-				});
+				ipcFlux.dispatch('local', 'action1').should.eventually.equal('action1').notify(done);
 			});
 
-			it('dispatch ({ dispatch })', () => {
+			it('dispatch ({ dispatch })', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }) => {
@@ -49,12 +47,10 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('local', 'action1').then((data) => {
-					expect(data).to.equal('action2');
-				});
+				ipcFlux.dispatch('local', 'action1').should.eventually.equal('action2').notify(done);
 			});
 
-			it('dispatch ({}, payload)', () => {
+			it('dispatch ({}, payload)', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({}, payload) => {
@@ -63,12 +59,10 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('local', 'action1', 'hello').then((data) => {
-					expect(data).to.equal('hello');
-				});
+				ipcFlux.dispatch('local', 'action1', 'hello').should.eventually.equal('hello').notify(done);
 			});
 
-			it('dispatch ({ dispatch }, payload)', () => {
+			it('dispatch ({ dispatch }, payload)', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }, payload) => {
@@ -80,12 +74,10 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('local', 'action1', 'hello').then((data) => {
-					expect(data).to.equal('hello');
-				});
+				ipcFlux.dispatch('local', 'action1', 'hello').should.eventually.equal('hello').notify(done);
 			});
 
-			it('dispatch (chain)', () => {
+			it('dispatch (chain)', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }, payload) => {
@@ -106,9 +98,7 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('local', 'action1', 'chain dispatch').then((data) => {
-					expect(data).to.equal('chain dispatch');
-				});
+				ipcFlux.dispatch('local', 'action1', 'chain dispatch').should.eventually.equal('chain dispatch').notify(done);
 			});
 
 			it('dispatch simultaneous', (done) => {
@@ -127,14 +117,64 @@ describe('Main', () => {
 					}
 				});
 
-				ipcFlux.dispatch('local', 'action1').then((data) => {
-					expect(data).to.equal('action1');
-					done();
+				ipcFlux.dispatch('local', 'action1').should.eventually.equal('action1').notify(done);
+
+				ipcFlux.dispatch('local', 'action2').should.eventually.equal('action2');
+			});
+		});
+
+		describe('main --> renderer', () => {
+			it('dispatch', (done) => {
+				const ipcFlux = new IpcFlux();
+
+				setTimeout(() => {
+					ipcFlux.dispatch(1, 'action1').should.eventually.equal('action1 renderer').notify(done);
+				}, 150);
+			});
+
+			it('dispatch ({ dispatch })', (done) => {
+				const ipcFlux = new IpcFlux();
+
+				ipcFlux.dispatch(1, 'action2').should.eventually.equal('action1 renderer').notify(done);
+			});
+
+			it('dispatch ({}, payload)', (done) => {
+				const ipcFlux = new IpcFlux();
+
+				ipcFlux.dispatch(1, 'action4', 'payload').should.eventually.equal('payload').notify(done);
+			});
+
+			it('dispatch ({ dispatch }, payload)', (done) => {
+				const ipcFlux = new IpcFlux();
+
+				ipcFlux.dispatch(1, 'action4', 'hello').should.eventually.equal('hello').notify(done);
+			});
+
+			it('dispatch (chain)', (done) => {
+				const ipcFlux = new IpcFlux();
+
+				ipcFlux.dispatch(1, 'chainDispatch', 'chain dispatch').should.eventually.equal('chain dispatch').notify(done);
+			});
+
+			it('dispatch simultaneous', (done) => {
+				const ipcFlux = new IpcFlux({
+					actions: {
+						action1: ({ dispatch }) => {
+							return new Promise((resolve) => {
+								setTimeout(() => {
+									resolve(dispatch(1, 'chainDispatch'));
+								}, 100);
+							});
+						},
+						action2: ({ dispatch }) => {
+							return dispatch(1, 'action1');
+						}
+					}
 				});
 
-				ipcFlux.dispatch('local', 'action2').then((data) => {
-					expect(data).to.equal('action2');
-				});
+				ipcFlux.dispatch('local', 'action1').should.eventually.equal('chain dispatch').notify(done);
+
+				ipcFlux.dispatch('local', 'action2').should.eventually.equal('action1 renderer');
 			});
 		});
 	});
