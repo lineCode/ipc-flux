@@ -3,13 +3,13 @@ require('babel-register')({
 	ignore: /node_modules/
 });
 
-// allow chai api's globally
 const chai = require('chai');
 const chaiAsPromised = require('chai-as-promised');
 
+chai.should();
 chai.use(chaiAsPromised);
 
-const {expect, should, assert} = chai;
+const { expect, should, assert } = chai;
 
 global.expect = expect;
 global.should = should();

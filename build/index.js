@@ -74,6 +74,8 @@ var IpcFlux = function () {
 
 		_classCallCheck(this, IpcFlux);
 
+		global.flux = this;
+
 		if (Process.env.type() !== 'production') {
 			// check if Promises can be used
 			assert(typeof Promise === 'undefined', 'Promises are required');
@@ -86,8 +88,6 @@ var IpcFlux = function () {
 		    actions = _options$actions === undefined ? {} : _options$actions,
 		    _options$mutations = options.mutations,
 		    mutations = _options$mutations === undefined ? {} : _options$mutations,
-		    _options$getters = options.getters,
-		    getters = _options$getters === undefined ? {} : _options$getters,
 		    _options$config = options.config,
 		    config = _options$config === undefined ? {} : _options$config,
 		    state = options.state;
@@ -106,18 +106,30 @@ var IpcFlux = function () {
 		this._committing = false;
 		this._actions = Object.create(null);
 		this._mutations = Object.create(null);
-		this._getters = Object.create(null);
-		this._subscribers = [];
 
 		this._instances = {};
 
 		// state still needs to be defined within renderer instances, just not from initial config, hence the assert above
-		this.state = Process.is('main') ? state || {} : {};
+		this.state = Process.is('main') ? _extends({}, state) : {};
+
+		if (Process.is('renderer')) {
+			new Promise(function (resolve, reject) {
+				_electron.ipcRenderer.on(channels.processes, function (event, arg) {
+					resolve(arg.state);
+				});
+			}).then(function (state) {
+				flux.state = state;
+			});
+		}
 
 		this._config = _extends({
 			maxListeners: 50,
 			debug: false
 		}, config);
+
+		// define the process emitter, minimizes code duplication
+		var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
+		emitter.setMaxListeners(this._config.maxListeners);
 
 		var eventHandlers = {
 			action: function action(event, arg) {
@@ -173,8 +185,8 @@ var IpcFlux = function () {
 			}
 		};
 
-		// because a single channel (`channel.call`) is used for all callers, route different calls to their required handler
-		var callHandler = function callHandler(event, arg) {
+		// because a single channel (`channel.call`) is used for all callers, route different calls to their respected handler
+		emitter.on(channels.call, function (event, arg) {
 			if ((typeof arg === 'undefined' ? 'undefined' : _typeof(arg)) !== 'object') {
 				return;
 			}
@@ -189,21 +201,36 @@ var IpcFlux = function () {
 				default:
 					break;
 			}
-		};
+		});
 
-		// define the process emitter, minimizes code duplication
-		var emitter = Process.is('main') ? _electron.ipcMain : _electron.ipcRenderer;
-		emitter.setMaxListeners(this._config.maxListeners);
+		// state handler
+		emitter.on(channels.state, function (event, arg) {
+			if (Process.is('main')) {
+				flux.state = arg.state;
+
+				Object.values(flux._instances).forEach(function (target) {
+					_electron.webContents.fromId(target).send(channels.state, { state: flux.state });
+				});
+			} else {
+				flux.state = arg.state;
+			}
+		});
 
 		var defineInstances = function defineInstances() {
 			if (Process.is('main')) {
 				_electron.ipcMain.on(channels.processes, function (event, arg) {
-					if (arg.uid === 'main' || arg.uid === 'local') {
+					if (arg.kill === true) {
+						delete flux._instances[arg.uid];
+					} else if (arg.uid === 'main' || arg.uid === 'local') {
 						event.sender.send(channels.error, '[IpcFlux] instance id cannot be \'main\' or \'local\' (BrowserWindow: ' + arg.id + ')');
 					} else if (flux._instances[arg.uid]) {
 						event.sender.send(channels.error, '[IpcFlux] instance id \'' + arg.uid + '\' already defined (BrowserWindow: ' + arg.id + ')');
 					} else {
 						flux._instances[arg.uid] = arg.id;
+
+						event.sender.send(channels.processes, {
+							state: flux.state
+						});
 					}
 				});
 			} else {
@@ -216,10 +243,7 @@ var IpcFlux = function () {
 
 		defineInstances();
 
-		// the emitter event handlers for calls and errors
-		emitter.on(channels.call, callHandler);
-
-		var errorCallHandler = function errorCallHandler(event, err) {
+		emitter.on(channels.error, function (event, err) {
 			if ((typeof err === 'undefined' ? 'undefined' : _typeof(err)) === 'object') {
 				switch (err.type) {
 					case 'throw':
@@ -240,13 +264,10 @@ var IpcFlux = function () {
 			} else {
 				console.error(err);
 			}
-		};
-
-		emitter.on(channels.error, errorCallHandler);
+		});
 
 		var dispatch = this.dispatch,
-		    commit = this.commit,
-		    commitExternal = this.commitExternal;
+		    commit = this.commit;
 
 
 		this.dispatch = function (target, type, payload) {
@@ -276,11 +297,6 @@ var IpcFlux = function () {
 			commit.call(flux, mutation, payload, options);
 		};
 
-		this.commitExternal = function (target, mutation, payload, options) {
-			// return a promise of the dispatch, resolving on callback
-			commitExternal.call(flux, target, mutation, payload, options);
-		};
-
 		// register all actions defined in the class constructor options
 		Object.keys(actions).forEach(function (action) {
 			_this.registerAction(action, actions[action]);
@@ -291,14 +307,18 @@ var IpcFlux = function () {
 			_this.registerMutation(mutation, mutations[mutation]);
 		});
 
-		// register all getters defined in the class constructor options
-		Object.keys(getters).forEach(function (getter) {
-			_this.registerGetter(getter, getters[getter]);
-		});
-
 		this.debug = {
 			process: Process.type(),
-			channels: channels
+			channels: channels,
+			kill: function kill() {
+				if (Process.is('renderer')) {
+					_electron.ipcRenderer.send(channels.processes, {
+						kill: true,
+						uid: flux._id,
+						id: _electron.remote.getCurrentWindow().id || null
+					});
+				}
+			}
 		};
 	}
 
@@ -371,8 +391,6 @@ var IpcFlux = function () {
 	}, {
 		key: 'commit',
 		value: function commit(_type, _payload, _options) {
-			var _this2 = this;
-
 			var flux = this;
 
 			var _type$payload$options = {
@@ -398,71 +416,6 @@ var IpcFlux = function () {
 					handler(payload);
 				});
 			});
-
-			this._subscribers.forEach(function (sub) {
-				return sub(mutation, _this2.state);
-			});
-		}
-	}, {
-		key: 'commitExternal',
-		value: function commitExternal(_target, _mutation, _payload, _options) {
-			var flux = this;
-
-			var arg = {
-				process: Process.type(),
-				callType: 'mutation'
-			};
-
-			var _target$mutation$payl = {
-				target: _target,
-				mutation: _mutation,
-				payload: _payload,
-				options: _options
-			},
-			    target = _target$mutation$payl.target,
-			    mutation = _target$mutation$payl.mutation,
-			    payload = _target$mutation$payl.payload,
-			    options = _target$mutation$payl.options;
-
-
-			if (Process.is('main')) {
-				if ((typeof target === 'undefined' ? 'undefined' : _typeof(target)) !== 'object' && typeof target !== 'number') {
-					console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
-					return;
-				}
-
-				target = typeof target === 'number' ? _electron.webContents.fromId(target) : target.webContents;
-
-				if (!target.webContents) {
-					console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
-					return;
-				}
-
-				if (typeof mutation !== 'string') {
-					console.error('[IpcFlux] mutation not passed as parameter');
-					return;
-				}
-
-				_electron.webContents.fromId(target.webContents.id).send(channels.call, _extends({}, arg, {
-					mutation: mutation,
-					payload: payload,
-					options: options,
-					target: target.webContents.id
-				}));
-			} else if (Process.is('renderer')) {
-				if (typeof target !== 'string') {
-					console.error('[IpcFlux] mutation not passed as parameter');
-					return;
-				}
-
-				// send a call to the main process to dispatch the action
-				_electron.ipcRenderer.send(channels.call, _extends({}, arg, {
-					mutation: target,
-					payload: mutation,
-					options: payload,
-					target: _electron.remote.getCurrentWindow().id
-				}));
-			}
 		}
 	}, {
 		key: 'registerAction',
@@ -479,7 +432,6 @@ var IpcFlux = function () {
 				var res = handler({
 					dispatch: flux.dispatch,
 					commit: flux.commit,
-					commitExternal: flux.commitExternal,
 					state: flux.state
 				}, payload, cb);
 
@@ -503,26 +455,31 @@ var IpcFlux = function () {
 			});
 		}
 	}, {
-		key: 'registerGetter',
-		value: function registerGetter(getter, raw) {
-			var flux = this;
-
-			if (this._getters[getter]) {
-				console.log('[IpcFlux] duplicate getter key');
-				return;
-			}
-
-			this._getters[getter] = function () {
-				return raw(flux.state, flux.getters);
-			};
-		}
-	}, {
 		key: '_withCommit',
 		value: function _withCommit(fn) {
+			var flux = this;
+
 			var committing = this._committing;
 			this._committing = true;
 			fn();
 			this._committing = committing;
+
+			if (Process.is('main')) {
+				Object.values(flux._instances).forEach(function (target) {
+					_electron.webContents.fromId(target).send(channels.state, { state: flux.state });
+				});
+			} else {
+				_electron.ipcRenderer.send(channels.state, { state: flux.state });
+			}
+		}
+	}, {
+		key: 'replaceState',
+		value: function replaceState(state) {
+			var flux = this;
+
+			this._withCommit(function () {
+				flux.state = state;
+			});
 		}
 	}]);
 
@@ -530,4 +487,3 @@ var IpcFlux = function () {
 }();
 
 exports.default = IpcFlux;
-//# sourceMappingURL=index.js.map

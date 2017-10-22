@@ -1,35 +1,35 @@
 module.exports = {
-    "env": {
-        "es6": true,
-        "node": true
-    },
-    "extends": "eslint:recommended",
-    "parser": "babel-eslint",
-    "parserOptions": {
-        "sourceType": "module"
-    },
-    "plugins": [
-    	"html"
-    ],
-    "rules": {
-        "indent": [
-            "error",
-            "tab",
-            {"SwitchCase": 1}
-        ],
-        "linebreak-style": [
-            "error",
-            "unix"
-        ],
-        "quotes": [
-            "error",
-            "single"
-        ],
-        "semi": [
-            "error",
-            "always"
-        ],
-        "capitalized-comments": 0,
+	"env": {
+		"es6": true,
+		"node": true
+	},
+	"extends": "eslint:recommended",
+	"parser": "babel-eslint",
+	"parserOptions": {
+		"sourceType": "module"
+	},
+	"plugins": [
+		"html"
+	],
+	"rules": {
+		"indent": [
+			"error",
+			"tab",
+			{ "SwitchCase": 1 }
+		],
+		"linebreak-style": [
+			"error",
+			"unix"
+		],
+		"quotes": [
+			"error",
+			"single"
+		],
+		"semi": [
+			"error",
+			"always"
+		],
+		"capitalized-comments": 0,
 		"eol-last": 0,
 		"no-trailing-spaces": 0,
 		"no-undef": 0,
@@ -44,5 +44,5 @@ module.exports = {
 		"spaced-comment": 0,
 		"no-use-before-define": 0,
 		"no-console": 0
-    }
+	}
 };

@@ -1,20 +1,21 @@
 {
   "name": "ipc-flux",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "author": "Harry Park <harry@harrypark.io>",
   "description": "Flux like state & action management across electron processes (ipc).",
   "license": "MIT",
   "repository": "https://github.com/harryparkdotio/ipc-flux.git",
   "main": "build/index.js",
   "scripts": {
-    "lint": "./node_modules/.bin/eslint \"**/*.js\"",
-    "build": "./node_modules/.bin/babel --presets=es2015,stage-0 src/ --out-dir build/ --source-maps",
-    "test:main": "./node_modules/.bin/electron-mocha --require test/index.js --require-main test/main.js test/specs/main.spec.js",
-    "test:renderer": "./node_modules/.bin/electron-mocha --require test/index.js --require-main test/main.js --renderer test/specs/renderer.spec.js",
+    "lint": "eslint \"**/*.js\"",
+    "build": "babel --presets=es2015,stage-0 src/ --out-dir build/",
+    "test:main": "electron-mocha --require-main test/support/init-renderer.js test/specs/main.spec",
+    "test:renderer": "electron-mocha --require-main test/support/main.js --renderer test/specs/renderer.spec",
     "test": "npm run lint && npm run test:main && npm run test:renderer",
     "pretest": "npm run build",
     "example": "electron ./example",
-    "preexample": "npm run build"
+    "preexample": "npm run build",
+    "prepublish": "npm run build"
   },
   "devDependencies": {
     "babel-cli": "^6.24.1",
@@ -27,13 +28,8 @@
     "chai-as-promised": "^7.0.0",
     "electron-mocha": "^4.0.0",
     "eslint": "^4.5.0",
-    "eslint-plugin-html": "^3.2.0"
-  },
-  "babel": {
-    "presets": [
-      "es2015",
-      "stage-0"
-    ]
+    "eslint-plugin-html": "^3.2.0",
+    "mocha": "^4.0.1"
   },
   "dependencies": {
     "electron": "^1.6.11"

@@ -47,6 +47,8 @@ const genCallbackId = () => {
 
 class IpcFlux {
 	constructor(options = {}) {
+		global.flux = this;
+
 		if (Process.env.type() !== 'production') {
 			// check if Promises can be used
 			assert(typeof Promise === 'undefined', 'Promises are required');
@@ -54,7 +56,7 @@ class IpcFlux {
 
 		removeExistingListeners();
 
-		const { id, actions = {}, mutations = {}, getters = {}, config = {}, state } = options;
+		const { id, actions = {}, mutations = {}, config = {}, state } = options;
 
 		// check if state is defined or is an object with something in it
 		assert((state !== undefined || (typeof state === 'object' && Object.keys(state).length > 0)) && Process.is('renderer'), 'initial state must be declared in main process');
@@ -69,19 +71,31 @@ class IpcFlux {
 		this._committing = false;
 		this._actions = Object.create(null);
 		this._mutations = Object.create(null);
-		this._getters = Object.create(null);
-		this._subscribers = [];
 
 		this._instances = {};
 
 		// state still needs to be defined within renderer instances, just not from initial config, hence the assert above
-		this.state = Process.is('main') ? state || {} : {};
+		this.state = Process.is('main') ? { ...state } : {};
+
+		if (Process.is('renderer')) {
+			new Promise((resolve, reject) => {
+				ipcRenderer.on(channels.processes, (event, arg) => {
+					resolve(arg.state);
+				});
+			}).then((state) => {
+				flux.state = state;
+			});
+		}
 
 		this._config = {
 			maxListeners: 50,
 			debug: false,
 			...config
 		};
+
+		// define the process emitter, minimizes code duplication
+		const emitter = Process.is('main') ? ipcMain : ipcRenderer;
+		emitter.setMaxListeners(this._config.maxListeners);
 
 		const eventHandlers = {
 			action: (event, arg) => {
@@ -140,8 +154,8 @@ class IpcFlux {
 			}
 		};
 
-		// because a single channel (`channel.call`) is used for all callers, route different calls to their required handler
-		const callHandler = (event, arg) => {
+		// because a single channel (`channel.call`) is used for all callers, route different calls to their respected handler
+		emitter.on(channels.call, (event, arg) => {
 			if (typeof arg !== 'object') {
 				return;
 			}
@@ -156,21 +170,36 @@ class IpcFlux {
 				default:
 					break;
 			}
-		};
+		});
 
-		// define the process emitter, minimizes code duplication
-		const emitter = Process.is('main') ? ipcMain : ipcRenderer;
-		emitter.setMaxListeners(this._config.maxListeners);
+		// state handler
+		emitter.on(channels.state, (event, arg) => {
+			if (Process.is('main')) {
+				flux.state = arg.state;
+
+				Object.values(flux._instances).forEach((target) => {
+					webContents.fromId(target).send(channels.state, { state: flux.state });
+				});
+			} else {
+				flux.state = arg.state;
+			}
+		});
 
 		const defineInstances = () => {
 			if (Process.is('main')) {
 				ipcMain.on(channels.processes, (event, arg) => {
-					if (arg.uid === 'main' || arg.uid === 'local') {
+					if (arg.kill === true) {
+						delete flux._instances[arg.uid];
+					} else if (arg.uid === 'main' || arg.uid === 'local') {
 						event.sender.send(channels.error, `[IpcFlux] instance id cannot be 'main' or 'local' (BrowserWindow: ${arg.id})`);
 					} else if (flux._instances[arg.uid]) {
 						event.sender.send(channels.error, `[IpcFlux] instance id '${arg.uid}' already defined (BrowserWindow: ${arg.id})`);
 					} else {
 						flux._instances[arg.uid] = arg.id;
+
+						event.sender.send(channels.processes, {
+							state: flux.state
+						});
 					}
 				});
 			} else {
@@ -183,10 +212,7 @@ class IpcFlux {
 
 		defineInstances();
 
-		// the emitter event handlers for calls and errors
-		emitter.on(channels.call, callHandler);
-
-		const errorCallHandler = (event, err) => {
+		emitter.on(channels.error, (event, err) => {
 			if (typeof err === 'object') {
 				switch (err.type) {
 					case 'throw':
@@ -207,11 +233,9 @@ class IpcFlux {
 			} else {
 				console.error(err);
 			}
-		};
+		});
 
-		emitter.on(channels.error, errorCallHandler);
-
-		const { dispatch, commit, commitExternal } = this;
+		const { dispatch, commit } = this;
 
 		this.dispatch = (target, type, payload) => {
 			if (target === 'local' || (!Process.is('main') && target === remote.getCurrentWindow().id)) {
@@ -240,11 +264,6 @@ class IpcFlux {
 			commit.call(flux, mutation, payload, options);
 		};
 
-		this.commitExternal = (target, mutation, payload, options) => {
-			// return a promise of the dispatch, resolving on callback
-			commitExternal.call(flux, target, mutation, payload, options);
-		};
-
 		// register all actions defined in the class constructor options
 		Object.keys(actions).forEach(action => {
 			this.registerAction(action, actions[action]);
@@ -255,14 +274,18 @@ class IpcFlux {
 			this.registerMutation(mutation, mutations[mutation]);
 		});
 
-		// register all getters defined in the class constructor options
-		Object.keys(getters).forEach(getter => {
-			this.registerGetter(getter, getters[getter]);
-		});
-
 		this.debug = {
 			process: Process.type(),
-			channels
+			channels,
+			kill: () => {
+				if (Process.is('renderer')) {
+					ipcRenderer.send(channels.processes, {
+						kill: true,
+						uid: flux._id,
+						id: remote.getCurrentWindow().id || null
+					});
+				}
+			}
 		};
 	}
 
@@ -345,65 +368,6 @@ class IpcFlux {
 				handler(payload);
 			});
 		});
-
-		this._subscribers.forEach(sub => sub(mutation, this.state));
-	}
-
-	commitExternal(_target, _mutation, _payload, _options) {
-		const flux = this;
-
-		const arg = {
-			process: Process.type(),
-			callType: 'mutation'
-		};
-
-		let { target, mutation, payload, options } = {
-			target: _target,
-			mutation: _mutation,
-			payload: _payload,
-			options: _options
-		};
-
-		if (Process.is('main')) {
-			if (typeof target !== 'object' && typeof target !== 'number') {
-				console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
-				return;
-			}
-
-			target = typeof target === 'number' ? webContents.fromId(target) : target.webContents;
-
-			if (!target.webContents) {
-				console.error('[IpcFlux] target passed is not instance of BrowserWindow or active BrowserWindow id');
-				return;
-			}
-
-			if (typeof mutation !== 'string') {
-				console.error('[IpcFlux] mutation not passed as parameter');
-				return;
-			}
-
-			webContents.fromId(target.webContents.id).send(channels.call, {
-				...arg,
-				mutation,
-				payload,
-				options,
-				target: target.webContents.id
-			});
-		} else if (Process.is('renderer')) {
-			if (typeof target !== 'string') {
-				console.error('[IpcFlux] mutation not passed as parameter');
-				return;
-			}
-
-			// send a call to the main process to dispatch the action
-			ipcRenderer.send(channels.call, {
-				...arg,
-				mutation: target,
-				payload: mutation,
-				options: payload,
-				target: remote.getCurrentWindow().id
-			});
-		}
 	}
 
 	registerAction(action, handler) {
@@ -419,7 +383,6 @@ class IpcFlux {
 			let res = handler({
 				dispatch: flux.dispatch,
 				commit: flux.commit,
-				commitExternal: flux.commitExternal,
 				state: flux.state
 			}, payload, cb);
 
@@ -442,24 +405,29 @@ class IpcFlux {
 		});
 	}
 
-	registerGetter(getter, raw) {
+	_withCommit(fn) {
 		const flux = this;
 
-		if (this._getters[getter]) {
-			console.log('[IpcFlux] duplicate getter key');
-			return;
-		}
-
-		this._getters[getter] = () => {
-			return raw(flux.state, flux.getters);
-		};
-	}
-
-	_withCommit(fn) {
 		const committing = this._committing;
 		this._committing = true;
 		fn();
 		this._committing = committing;
+
+		if (Process.is('main')) {
+			Object.values(flux._instances).forEach((target) => {
+				webContents.fromId(target).send(channels.state, { state: flux.state });
+			});
+		} else {
+			ipcRenderer.send(channels.state, { state: flux.state });
+		}
+	}
+
+	replaceState(state) {
+		const flux = this;
+
+		this._withCommit(() => {
+			flux.state = state;
+		});
 	}
 }
 

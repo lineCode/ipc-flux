@@ -1,4 +1,9 @@
 describe('Renderer', () => {
+	afterEach(() => {
+		const ipcFlux = new IpcFlux();
+		ipcFlux.debug.kill();
+	});
+
 	describe('setup', () => {
 		it('instance created on `new`', () => {
 			const ipcFlux = new IpcFlux();
@@ -10,7 +15,7 @@ describe('Renderer', () => {
 			expect(ipcFlux.debug.process).to.equal('renderer');
 		});
 
-		it('action defined via `registerAction`', (done) => {
+		it('action registered via `registerAction`', (done) => {
 			const ipcFlux = new IpcFlux();
 
 			ipcFlux.registerAction('action1', () => {
@@ -33,7 +38,42 @@ describe('Renderer', () => {
 		});
 	});
 
-	describe('dispatch', () => {
+	describe('state', () => {
+		it('state retrieved from main', () => {
+			const ipcFlux = new IpcFlux();
+			setTimeout(() => {
+				expect(JSON.stringify(ipcFlux.state)).to.equal(JSON.stringify({a: 1, b: 2, c: 3}));
+			}, 150);
+		});
+
+		it('changes in main are pushed to renderer', () => {
+			const ipcFlux = new IpcFlux();
+
+			ipcFlux.dispatch('main', 'action7');
+
+			setTimeout(() => {
+				expect(JSON.stringify(ipcFlux.state)).to.equal(JSON.stringify({a: 4, b: 2, c: 3}));
+			}, 100);
+		});
+
+		it('changes in renderer are pushed to main', (done) => {
+			const ipcFlux = new IpcFlux({
+				mutations: {
+					a: (state) => {
+						state.a = 3;
+					}
+				}
+			});
+
+			ipcFlux.commit('a');
+
+			setTimeout(() => {
+				ipcFlux.dispatch('main', 'action8', 3).should.eventually.equal(true).notify(done);
+			}, 100);
+		});
+	});
+
+	describe('actions', () => {
 		describe('local', () => {
 			it('dispatch', (done) => {
 				const ipcFlux = new IpcFlux({
@@ -89,7 +129,7 @@ describe('Renderer', () => {
 				ipcFlux.dispatch('local', 'action1', 'hello').should.eventually.equal('hello').notify(done);
 			});
 
-			it('dispatch (chain)', (done) => {
+			it('dispatch chain', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }, payload) => {
@@ -113,7 +153,7 @@ describe('Renderer', () => {
 				ipcFlux.dispatch('local', 'action1', 'chain dispatch').should.eventually.equal('chain dispatch').notify(done);
 			});
 
-			it('dispatch simultaneous', (done) => {
+			it('dispatch asynchronous', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: () => {
@@ -201,7 +241,7 @@ describe('Renderer', () => {
 				ipcFlux.dispatch('main', 'action6', 'payload').should.eventually.equal('payloadpayload').notify(done);
 			});
 
-			it('dispatch (chain)', (done) => {
+			it('dispatch chain', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({}, payload) => {
@@ -213,7 +253,7 @@ describe('Renderer', () => {
 				ipcFlux.dispatch('main', 'chainDispatch').should.eventually.equal('chain dispatch').notify(done);
 			});
 
-			it('dispatch simultaneous', (done) => {
+			it('dispatch asynchronous', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }) => {
@@ -296,7 +336,7 @@ describe('Renderer', () => {
 				ipcFlux.dispatch(1, 'action6', 'payload').should.eventually.equal('payloadpayload').notify(done);
 			});
 
-			it('dispatch (chain)', (done) => {
+			it('dispatch chain', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({}, payload) => {
@@ -308,7 +348,7 @@ describe('Renderer', () => {
 				ipcFlux.dispatch(1, 'chainDispatch').should.eventually.equal('chain dispatch').notify(done);
 			});
 
-			it('dispatch simultaneous', (done) => {
+			it('dispatch asynchronous', (done) => {
 				const ipcFlux = new IpcFlux({
 					actions: {
 						action1: ({ dispatch }) => {
@@ -328,6 +368,36 @@ describe('Renderer', () => {
 
 				ipcFlux.dispatch('local', 'action2').should.eventually.equal('action1 renderer');
 			});
+		});
+	});
+
+	describe('mutations', () => {
+		it('commit', () => {
+			const ipcFlux = new IpcFlux({
+				mutations: {
+					a (state) {
+						state.a = 'changed';
+					}
+				}
+			});
+
+			ipcFlux.commit('a');
+
+			expect(ipcFlux.state.a).to.equal('changed');
+		});
+
+		it('commit (payload)', () => {
+			const ipcFlux = new IpcFlux({
+				mutations: {
+					a (state, n) {
+						state.a = n;
+					}
+				}
+			});
+
+			ipcFlux.commit('a', 'b');
+
+			expect(ipcFlux.state.a).to.equal('b');
 		});
 	});
 });
